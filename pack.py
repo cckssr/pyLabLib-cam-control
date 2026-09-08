@@ -9,7 +9,9 @@ import os
 import sys
 import re
 import subprocess
-import distutils.ccompiler
+
+import setuptools  # noqa: F401  (must be imported before distutils on Python 3.12+, see below)
+import distutils.ccompiler  # setuptools installs a compatibility shim for the stdlib removal
 
 sys.path.append(".")
 from utils import version

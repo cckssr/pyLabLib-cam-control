@@ -29,9 +29,19 @@ def find_camera_descriptors():
                     module_name, os.path.join(folder, f)
                 )
                 mod = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(mod)
+                try:
+                    spec.loader.exec_module(mod)
+                except Exception as e:
+                    # Some camera backends depend on vendor SDKs / C extensions that are only
+                    # available on specific platforms (e.g. PCO's SC2 extension is Windows-only).
+                    # Skip modules that fail to import instead of taking down the whole registry.
+                    print(
+                        "Could not load camera module {}: {}".format(module_name, e),
+                        file=sys.stderr,
+                    )
+                    continue
                 sys.modules[module_name] = mod
-    for module_name in sys.modules:
+    for module_name in list(sys.modules):
         if module_name.startswith(root_module_name + "."):
             mod = sys.modules[module_name]
             for v in mod.__dict__.values():

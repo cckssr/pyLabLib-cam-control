@@ -1,7 +1,4 @@
-try:
-    from PyQt5 import QtWidgets, QtCore, QtGui
-except ImportError:
-    from PySide2 import QtWidgets, QtCore, QtGui
+from PyQt5 import QtWidgets, QtCore, QtGui
 
 import os
 import sys
@@ -83,9 +80,10 @@ def update_splash_screen(show=None, msg=None):
 
 
 if __name__ == "__main__":
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-        "cam-control"
-    )  # fixes taskbar icon issue
+    if sys.platform == "win32":
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "cam-control"
+        )  # fixes taskbar icon issue
     app = prepare_app()
     splash = SplashScreen()
     splash.show_message("Setting up the environment...")

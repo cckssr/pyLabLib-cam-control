@@ -38,7 +38,7 @@ class MightexSSeriesCameraDescriptor(ICameraDescriptor):
         for i, cdesc in enumerate(cams):
             if verbose:
                 print(
-                    "Checking Mightex camera idx={}\n\Model {},   serial {}".format(
+                    "Checking Mightex camera idx={}\nModel {},   serial {}".format(
                         i, cdesc.model, cdesc.serial
                     )
                 )

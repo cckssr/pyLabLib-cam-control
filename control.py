@@ -22,11 +22,12 @@ if __name__ == "__main__":
     sys.path.append(
         os.path.abspath(".")
     )  # set current folder to the file location and add it to the search path
-python_folder = os.path.split(os.path.abspath(sys.executable))[0]
-pywin32_folder = os.path.join(python_folder, "Lib", "site-packages", "pywin32_system32")
-os.environ["PATH"] = (
-    pywin32_folder + ";" + os.environ.get("PATH", "")
-)  # fix pywin32 confusion with some Anaconda installations
+if sys.platform == "win32":
+    python_folder = os.path.split(os.path.abspath(sys.executable))[0]
+    pywin32_folder = os.path.join(python_folder, "Lib", "site-packages", "pywin32_system32")
+    os.environ["PATH"] = (
+        pywin32_folder + os.pathsep + os.environ.get("PATH", "")
+    )  # fix pywin32 confusion with some Anaconda installations
 
 from pylablib.core.thread import controller, synchronizing, threadprop
 from pylablib.core.gui.widgets import container, param_table
@@ -42,7 +43,11 @@ import pylablib
 from pylablib.core.gui import QtWidgets, QtCore, QtGui, Signal, qtkwargs
 import pyqtgraph
 
-pyqtgraph.setConfigOptions(useOpenGL=True, antialias=False)
+# OpenGL context creation can fail in headless/VM/remote-desktop environments; allow
+# disabling it without a code change (e.g. `CAMCONTROL_USE_OPENGL=0`).
+pyqtgraph.setConfigOptions(
+    useOpenGL=os.environ.get("CAMCONTROL_USE_OPENGL", "1") != "0", antialias=False
+)
 try:
     pyqtgraph.setConfigOptions(useNumba=True)
 except KeyError:

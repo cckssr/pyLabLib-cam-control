@@ -32,6 +32,7 @@ dev = [
     "ruff>=0.11",
     "pytest>=8",
     "pytest-qt>=4",
+    "setuptools>=68",  # pack.py needs this for the distutils compatibility shim on Python 3.12+
 ]
 
 [tool.setuptools.packages.find]
