@@ -45,3 +45,6 @@ include = ["camcontrol*"]
 
 [tool.setuptools.package-data]
 "camcontrol.resources" = ["*.ico", "*.png"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

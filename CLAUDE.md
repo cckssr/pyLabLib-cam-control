@@ -201,12 +201,25 @@ ships these files with the wheel.
 
 ## Testing
 
-There is currently no committed test suite. When adding one, drive it through
-the `simulated` camera under `QT_QPA_PLATFORM=offscreen` — this has been
-verified to work end-to-end (app boots, builds plugins, acquires frames,
-saves TIFF/BigTIFF, shuts down cleanly). A useful non-GUI smoke check:
+`tests/` (pytest, install with `pip install -e .[dev]`). `tests/conftest.py`
+sets `QT_QPA_PLATFORM=offscreen` if not already set, since it must happen
+before Qt is first imported.
 
-```python
-from camcontrol.cameras.loader import camera_descriptors
-assert len(camera_descriptors) == 23  # 22 on a platform missing PCOSC2's C extension
+```bash
+pytest
 ```
+
+- `test_camera_registry.py` — loader robustness (a broken vendor backend must
+  not take down the whole registry)
+- `test_plugin_discovery.py` — built-in plugins/filters found, external-directory
+  hook works, no double-loading when the external dir is the bundled one
+- `test_numba_kernels.py` — the two 12-bit packing kernels agree
+- `test_saving.py` — TIFF/BigTIFF round-trip via imageio
+- `test_acquisition.py` — full app through the `simulated` camera with the
+  `filter`/`trigger_save` plugins enabled, offscreen; a single combined test
+  rather than several, since pylablib's thread-controller registry is global
+  process state and running two full app instances in one pytest session
+  risks stale entries from incomplete teardown between tests. Note
+  `controller.get_gui_controller().stop()` raises
+  `threadprop.InterruptExceptionStop` by design (its mechanism for unwinding
+  the GUI event loop) — this must be caught, not treated as a test failure.
