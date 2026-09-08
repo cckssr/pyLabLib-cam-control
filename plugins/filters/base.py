@@ -5,7 +5,6 @@ Module contained base for filter classes.
 import numpy as np
 
 
-
 class IFrameFilter:
     """
     Base class for custom filters; any filter should inherit from this class (or implement the same interface).
@@ -19,17 +18,20 @@ class IFrameFilter:
     Processing of the frames is governed by 2 functions:
     :meth:`receive_frames` for receiving data from the camera, and :meth:`generate_frame` for sending processed frames back to the GUI.
     """
-    _class_name=None  # class name (needs to be defined to appear in the list)
-    _class_caption=None  # default class caption (by default, same as ``_class_name``)
-    _class_description=None  # longer class description
+
+    _class_name = None  # class name (needs to be defined to appear in the list)
+    _class_caption = None  # default class caption (by default, same as ``_class_name``)
+    _class_description = None  # longer class description
+
     def __init__(self):
-        self.description={"receive_all_frames":False,"gui/parameters":[]}
+        self.description = {"receive_all_frames": False, "gui/parameters": []}
         if self._class_caption is not None:
-            self.description["caption"]=self._class_caption
+            self.description["caption"] = self._class_caption
         if self._class_description is not None:
-            self.description["description"]=self._class_description
-        self.p={}
-        self._plotter_selector=None
+            self.description["description"] = self._class_description
+        self.p = {}
+        self._plotter_selector = None
+
     @classmethod
     def get_class_name(cls, kind="name"):
         """
@@ -38,23 +40,34 @@ class IFrameFilter:
         `kind` can be ``"name"`` (code-friendly identifiers to use in, e.g., settings file)
         or ``"caption"`` (formatted name to be used in GUI lists, etc.)
         """
-        if kind=="name":
+        if kind == "name":
             return cls._class_name or cls.__name__
-        elif kind=="caption":
+        elif kind == "caption":
             return cls._class_caption or cls.get_class_name(kind="name")
 
     ## Setup and utility functions ##
     def setup_general(self, receive_all_frames=False):
         """
         Setup general filter parameters.
-        
+
         Args:
             receive_all_frames: if ``True``, :meth:`receive_frames` is called for all frames received from the camera;
                 otherwise, it is only called with a small subset of frames (this is to relieve the load from the inter-process communication,
                 in case the filter operates only on a single frame); default is ``False``
         """
-        self.description["receive_all_frames"]=receive_all_frames
-    def add_parameter(self, name, label=None, kind="float", limit=(None,None), fmt=None, options=None, default=None, indicator=False):
+        self.description["receive_all_frames"] = receive_all_frames
+
+    def add_parameter(
+        self,
+        name,
+        label=None,
+        kind="float",
+        limit=(None, None),
+        fmt=None,
+        options=None,
+        default=None,
+        indicator=False,
+    ):
         """
         Add a GUI parameter.
 
@@ -73,35 +86,58 @@ class IFrameFilter:
         """
         if name in self.p:
             raise ValueError("parameter {} is already defined".format(name))
-        allowed_kinds=["text","float","int","virtual"] if indicator else ["text","float","int","button","check","select","virtual"]
+        allowed_kinds = (
+            ["text", "float", "int", "virtual"]
+            if indicator
+            else ["text", "float", "int", "button", "check", "select", "virtual"]
+        )
         if kind not in allowed_kinds:
-            raise ValueError("unrecognized parameter kind: {}; allowed parameters are {}".format(kind,allowed_kinds))
+            raise ValueError(
+                "unrecognized parameter kind: {}; allowed parameters are {}".format(
+                    kind, allowed_kinds
+                )
+            )
         if label is None:
-            label=name
+            label = name
         if default is None:
-            if kind in ["float","int"]:
-                default=limit[0] or 0
-            elif kind=="check":
-                default=False
-            elif kind=="select":
-                default=list(options)[0]
-        self.description["gui/parameters"].append({"name":name,"label":label,"kind":kind,"limit":limit,"fmt":fmt,"options":options or {},"default":default,"indicator":indicator})
-        self.p[name]=default
-        self.rectangles={}
-    def add_linepos_parameter(self, default=(0,0)):
+            if kind in ["float", "int"]:
+                default = limit[0] or 0
+            elif kind == "check":
+                default = False
+            elif kind == "select":
+                default = list(options)[0]
+        self.description["gui/parameters"].append(
+            {
+                "name": name,
+                "label": label,
+                "kind": kind,
+                "limit": limit,
+                "fmt": fmt,
+                "options": options or {},
+                "default": default,
+                "indicator": indicator,
+            }
+        )
+        self.p[name] = default
+        self.rectangles = {}
+
+    def add_linepos_parameter(self, default=(0, 0)):
         """Add a plot lines position parameter (named ``"linepos"``) which can be used to obtain current image view lines position"""
-        self.add_parameter("linepos",kind="virtual",default=default)
+        self.add_parameter("linepos", kind="virtual", default=default)
+
     def add_rectangle(self, name, center, size, visible=False):
         """Add a rectangle to be displayed in the image window"""
-        self.rectangles[name]={"center":center,"size":size,"visible":visible}
+        self.rectangles[name] = {"center": center, "size": size, "visible": visible}
+
     def change_rectangle(self, name, center=None, size=None, visible=None):
         """Change rectangle parameters"""
-        for k,v in [("center",center),("size",size),("visible",visible)]:
+        for k, v in [("center", center), ("size", size), ("visible", visible)]:
             if v is not None:
-                self.rectangles[name][k]=v
+                self.rectangles[name][k] = v
+
     def select_plotter(self, selector):
         """Select a specific plotter settings set"""
-        self._plotter_selector=selector
+        self._plotter_selector = selector
 
     ## Setup functions ##
     def setup(self):
@@ -111,13 +147,14 @@ class IFrameFilter:
         Called when the filter is loaded.
         All the setup functionality should ideally be added here rather than in the constructor.
         """
+
     def cleanup(self):
         """
         Clean up filter data.
 
         Called when the filter is stopped can closed (on the application shutdown, or when a different filter is loaded).
         """
-    
+
     ## Parameter control functions ##
     def get_all_parameters(self):
         """
@@ -128,7 +165,11 @@ class IFrameFilter:
         In principle, can return only subset of parameters, in which case other parameters will keep displaying previous values.
         By default, return a dictionary of all values returned by :meth:`get_parameter`.
         """
-        return {p["name"]:self.get_parameter(p["name"]) for p in self.description["gui/parameters"]}
+        return {
+            p["name"]: self.get_parameter(p["name"])
+            for p in self.description["gui/parameters"]
+        }
+
     def get_parameter(self, name):
         """
         Get filter parameter value to display in GUI indicators.
@@ -137,6 +178,7 @@ class IFrameFilter:
         By default, return the value in ``p`` attribute.
         """
         return self.p[name]
+
     def set_parameter(self, name, value):
         """
         Set a single filter parameter value.
@@ -146,8 +188,8 @@ class IFrameFilter:
 
         By default, set value in ``p`` attribute.
         """
-        self.p[name]=value
-    
+        self.p[name] = value
+
     ## Main computation functions ##
     def receive_frames(self, frames):
         """
@@ -155,6 +197,7 @@ class IFrameFilter:
 
         `frames` is a 3D numpy array, where the first axis is a frame number; the length of the first axis is always at least 1.
         """
+
     def generate_frame(self):
         """
         Generate a new frame to show.
@@ -164,6 +207,7 @@ class IFrameFilter:
         Can also return ``None``, in which case the display is not updated (i.e., it means that there are no new frames to show).
         """
         return None
+
     def generate_data(self):
         """
         Generate new data to show.
@@ -173,16 +217,15 @@ class IFrameFilter:
             ``"frame"``: frame to show in the frame plotter
                 (2D array; by default, the one generated by :meth:`generate_frame`)
         """
-        data={}
-        frame=self.generate_frame()  # pylint: disable=assignment-from-none
+        data = {}
+        frame = self.generate_frame()  # pylint: disable=assignment-from-none
         if frame is not None:
-            data["frame"]=frame
+            data["frame"] = frame
         if self._plotter_selector is not None:
-            data["plotter/selector"]=self._plotter_selector
+            data["plotter/selector"] = self._plotter_selector
         if self.rectangles:
-            data["rectangles"]=self.rectangles
+            data["rectangles"] = self.rectangles
         return data
-
 
 
 class ISingleFrameFilter(IFrameFilter):
@@ -194,28 +237,43 @@ class ISingleFrameFilter(IFrameFilter):
 
     Examples are frame gaussian blur (or any kind of convolution) or Fourier transform.
     """
+
     def setup(self, multichannel="split"):
         super().setup()
-        self._latest_frame=None
-        if multichannel not in ["split","average","keep"]:
-            raise ValueError("unrecognzied multichannel option: {}; valid options are 'split', 'average', and 'keep'".format(multichannel))
-        self._multichannel=multichannel
+        self._latest_frame = None
+        if multichannel not in ["split", "average", "keep"]:
+            raise ValueError(
+                "unrecognzied multichannel option: {}; valid options are 'split', 'average', and 'keep'".format(
+                    multichannel
+                )
+            )
+        self._multichannel = multichannel
+
     def receive_frames(self, frames):
-        self._latest_frame=frames[-1].copy()
+        self._latest_frame = frames[-1].copy()
+
     def generate_frame(self):
         if self._latest_frame is None:
             return None
-        frame=self._latest_frame
-        if self._multichannel=="split":
+        frame = self._latest_frame
+        if self._multichannel == "split":
             return self._process_split_frame(frame)
-        if self._multichannel=="average":
-            while frame.ndim>2:
-                frame=frame.mean(axis=-1)
+        if self._multichannel == "average":
+            while frame.ndim > 2:
+                frame = frame.mean(axis=-1)
         return self.process_frame(frame)
+
     def _process_split_frame(self, frame):
-        if frame.ndim>2:
-            return np.concatenate([self._process_split_frame(frame[...,ch])[...,None] for ch in range(frame.shape[-1])],axis=-1)
+        if frame.ndim > 2:
+            return np.concatenate(
+                [
+                    self._process_split_frame(frame[..., ch])[..., None]
+                    for ch in range(frame.shape[-1])
+                ],
+                axis=-1,
+            )
         return self.process_frame(frame)
+
     def process_frame(self, frame):
         """
         Process a single frame and return the result.
@@ -223,8 +281,6 @@ class ISingleFrameFilter(IFrameFilter):
         `frame` is a 2D numpy array containing a single camera frames.
         """
         return frame
-
-
 
 
 class IMultiFrameFilter(IFrameFilter):
@@ -237,7 +293,14 @@ class IMultiFrameFilter(IFrameFilter):
 
     Examples are median background subtraction or sliding window average.
     """
-    def setup(self, buffer_size=1, buffer_step=1, process_incomplete=False, add_length_status=True):
+
+    def setup(
+        self,
+        buffer_size=1,
+        buffer_step=1,
+        process_incomplete=False,
+        add_length_status=True,
+    ):
         """
         Setup the buffered filter.
 
@@ -251,35 +314,47 @@ class IMultiFrameFilter(IFrameFilter):
         """
         super().setup()
         self.setup_general(receive_all_frames=True)
-        self.buffer=[]
-        self.buffer_size=buffer_size
-        self.buffer_step=buffer_step
-        self._buffer_step_part=0
-        self.process_incomplete=process_incomplete
+        self.buffer = []
+        self.buffer_size = buffer_size
+        self.buffer_step = buffer_step
+        self._buffer_step_part = 0
+        self.process_incomplete = process_incomplete
         if add_length_status:
-            self.add_parameter("buff_accum",label="Accumulated frames",kind="text",indicator=True)
+            self.add_parameter(
+                "buff_accum", label="Accumulated frames", kind="text", indicator=True
+            )
+
     def reshape_buffer(self, buffer_size=None, buffer_step=None):
         """Change buffer size and the step between the frames"""
         if buffer_size is not None:
-            self.buffer_size=max(buffer_size,1)
-            self.buffer=self.buffer[-self.buffer_size:]
-        if buffer_step is not None and buffer_step!=self.buffer_step:
-            self.buffer_step=buffer_step
-            self._buffer_step_part=0
-            self.buffer=[]
+            self.buffer_size = max(buffer_size, 1)
+            self.buffer = self.buffer[-self.buffer_size :]
+        if buffer_step is not None and buffer_step != self.buffer_step:
+            self.buffer_step = buffer_step
+            self._buffer_step_part = 0
+            self.buffer = []
+
     def receive_frames(self, frames):
-        if self.buffer and self.buffer[0].shape!=frames.shape[1:]:
-            self.buffer=[]
-        start=self.buffer_step-self._buffer_step_part-1
-        self._buffer_step_part=(len(frames)+self._buffer_step_part)%self.buffer_step
-        frames=frames[start::self.buffer_step]
-        self.buffer+=list(frames)
-        if len(self.buffer)>self.buffer_size:
-            del self.buffer[:len(self.buffer)-self.buffer_size]
+        if self.buffer and self.buffer[0].shape != frames.shape[1:]:
+            self.buffer = []
+        start = self.buffer_step - self._buffer_step_part - 1
+        self._buffer_step_part = (
+            len(frames) + self._buffer_step_part
+        ) % self.buffer_step
+        frames = frames[start :: self.buffer_step]
+        self.buffer += list(frames)
+        if len(self.buffer) > self.buffer_size:
+            del self.buffer[: len(self.buffer) - self.buffer_size]
         if "buff_accum" in self.p:
-            self.p["buff_accum"]="{} / {}".format(len(self.buffer),self.buffer_size)
+            self.p["buff_accum"] = "{} / {}".format(len(self.buffer), self.buffer_size)
+
     def generate_frame(self):
-        return self.process_buffer(self.buffer[:self.buffer_size]) if self.process_incomplete or len(self.buffer)>=self.buffer_size else None
+        return (
+            self.process_buffer(self.buffer[: self.buffer_size])
+            if self.process_incomplete or len(self.buffer) >= self.buffer_size
+            else None
+        )
+
     def process_buffer(self, buffer):
         """
         Process buffer containing last ``self.buffer_size`` frames.
@@ -290,15 +365,20 @@ class IMultiFrameFilter(IFrameFilter):
         return buffer[-1]
 
 
-
-
 class IRingMultiFrameFilter(IFrameFilter):
     """
     Similar to :class:`IMultiFrameFilter`, but instead of list uses a numpy array to implement a ring buffer.
 
     Somewhat harder to use than :class:`IMultiFrameFilter`, but has a bit better performance.
     """
-    def setup(self, buffer_size=1, buffer_step=1, process_incomplete=False, add_length_status=True):
+
+    def setup(
+        self,
+        buffer_size=1,
+        buffer_step=1,
+        process_incomplete=False,
+        add_length_status=True,
+    ):
         """
         Setup the buffered filter.
 
@@ -312,63 +392,83 @@ class IRingMultiFrameFilter(IFrameFilter):
         """
         super().setup()
         self.setup_general(receive_all_frames=True)
-        self.buffer=None
-        self.buffer_size=buffer_size
-        self.buffer_step=buffer_step
-        self.process_incomplete=process_incomplete
-        self._buffer_step_part=0
-        self.end_pos=0 # position after the last added frame
-        self.filled=False # whether the buffer has been filled after reset
+        self.buffer = None
+        self.buffer_size = buffer_size
+        self.buffer_step = buffer_step
+        self.process_incomplete = process_incomplete
+        self._buffer_step_part = 0
+        self.end_pos = 0  # position after the last added frame
+        self.filled = False  # whether the buffer has been filled after reset
         if add_length_status:
-            self.add_parameter("buff_accum",label="Accumulated frames",kind="text",indicator=True)
-    def reshape_buffer(self, buffer_size=None, buffer_step=None, frame_shape=None, frame_dtype=None):
+            self.add_parameter(
+                "buff_accum", label="Accumulated frames", kind="text", indicator=True
+            )
+
+    def reshape_buffer(
+        self, buffer_size=None, buffer_step=None, frame_shape=None, frame_dtype=None
+    ):
         """
         Change buffer shape, data type, and step between the frames..
-        
+
         If any parameter is ``None``, it keeps its previous value.
         This method should always be used to change ``self.buffer_size``, otherwise the change has no effect
         """
         if buffer_size is not None:
-            self.buffer_size=buffer_size
+            self.buffer_size = buffer_size
         if frame_shape is None and self.buffer is not None:
-            frame_shape=self.buffer.shape[1:]
+            frame_shape = self.buffer.shape[1:]
         if frame_dtype is None and self.buffer is not None:
-            frame_dtype=self.buffer.dtype
+            frame_dtype = self.buffer.dtype
         if frame_shape is not None and frame_dtype is not None:
-            new_shape=(self.buffer_size,)+frame_shape
-            new_dtype=np.dtype(frame_dtype)
-            if self.buffer is None or self.buffer.shape!=new_shape or self.buffer.dtype!=new_dtype:
-                self.buffer=np.zeros(shape=new_shape,dtype=new_dtype)
-        if buffer_step is not None and buffer_step!=self.buffer_step:
-            self.buffer_step=buffer_step
-            self._buffer_step_part=0
-        self.end_pos=0
-        self.filled=False
+            new_shape = (self.buffer_size,) + frame_shape
+            new_dtype = np.dtype(frame_dtype)
+            if (
+                self.buffer is None
+                or self.buffer.shape != new_shape
+                or self.buffer.dtype != new_dtype
+            ):
+                self.buffer = np.zeros(shape=new_shape, dtype=new_dtype)
+        if buffer_step is not None and buffer_step != self.buffer_step:
+            self.buffer_step = buffer_step
+            self._buffer_step_part = 0
+        self.end_pos = 0
+        self.filled = False
+
     def receive_frames(self, frames):
-        if self.buffer is None or self.buffer.shape[1:]!=frames.shape[1:]:
-            self.reshape_buffer(frame_shape=frames.shape[1:],frame_dtype=frames.dtype)
-        start=self.buffer_step-self._buffer_step_part-1
-        self._buffer_step_part=(len(frames)+self._buffer_step_part)%self.buffer_step
-        frames=frames[start::self.buffer_step]
-        if len(frames)>=len(self.buffer):
-            self.buffer[:]=frames[-len(self.buffer):]
-            self.end_pos=0
-            self.filled=True
-        elif len(frames)+self.end_pos>=len(self.buffer):
-            frames_left=len(self.buffer)-self.end_pos
-            self.buffer[self.end_pos:]=frames[:frames_left]
-            self.buffer[:len(frames)-frames_left]=frames[frames_left:]
-            self.end_pos=len(frames)-frames_left
-            self.filled=True
+        if self.buffer is None or self.buffer.shape[1:] != frames.shape[1:]:
+            self.reshape_buffer(frame_shape=frames.shape[1:], frame_dtype=frames.dtype)
+        start = self.buffer_step - self._buffer_step_part - 1
+        self._buffer_step_part = (
+            len(frames) + self._buffer_step_part
+        ) % self.buffer_step
+        frames = frames[start :: self.buffer_step]
+        if len(frames) >= len(self.buffer):
+            self.buffer[:] = frames[-len(self.buffer) :]
+            self.end_pos = 0
+            self.filled = True
+        elif len(frames) + self.end_pos >= len(self.buffer):
+            frames_left = len(self.buffer) - self.end_pos
+            self.buffer[self.end_pos :] = frames[:frames_left]
+            self.buffer[: len(frames) - frames_left] = frames[frames_left:]
+            self.end_pos = len(frames) - frames_left
+            self.filled = True
         else:
-            self.buffer[self.end_pos:self.end_pos+len(frames)]=frames
-            self.end_pos+=len(frames)
+            self.buffer[self.end_pos : self.end_pos + len(frames)] = frames
+            self.end_pos += len(frames)
         if "buff_accum" in self.p:
-            self.p["buff_accum"]="{} / {}".format(len(self.buffer) if self.filled else self.end_pos,len(self.buffer))
+            self.p["buff_accum"] = "{} / {}".format(
+                len(self.buffer) if self.filled else self.end_pos, len(self.buffer)
+            )
+
     def generate_frame(self):
         if self.process_incomplete and not self.filled:
-            return self.process_buffer(self.buffer,0,self.end_pos)
-        return self.process_buffer(self.buffer,self.end_pos,len(self.buffer)) if self.filled else None # end_pos is also start_pos if buffer is filled
+            return self.process_buffer(self.buffer, 0, self.end_pos)
+        return (
+            self.process_buffer(self.buffer, self.end_pos, len(self.buffer))
+            if self.filled
+            else None
+        )  # end_pos is also start_pos if buffer is filled
+
     def process_buffer(self, buffer, start, filled):
         """
         Process buffer containing last ``self.buffer_size`` frames.
@@ -381,4 +481,6 @@ class IRingMultiFrameFilter(IFrameFilter):
         If the buffer is full, then chronologically frames go from ``start`` to ``len(buffer)``,
         and then continue from ``0`` to ``start``; otherwise, they go from ``0`` till ``filled``.
         """
-        return buffer[(start+filled-1)%len(buffer)]  # take the most recent valid frame
+        return buffer[
+            (start + filled - 1) % len(buffer)
+        ]  # take the most recent valid frame

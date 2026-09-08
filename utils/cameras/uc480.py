@@ -6,21 +6,32 @@ from ..gui.base_cam_ctl_gui import GenericCameraSettings_GUI, GenericCameraStatu
 from ..gui import cam_gui_parameters
 
 
-
 class PixelRateFloatGUIParameter(cam_gui_parameters.FloatGUIParameter):
     """
     Pixel rate parameter.
 
     Same as the basic floating point parameter, but automatically updates limits upon setup.
     """
+
     def __init__(self, settings, indicator=False, cam_name=None, cam_range_name=None):
-        super().__init__(settings,"pixel_rate","Pixel rate (MHz)",limit=(0,None),indicator=indicator,factor=1E-6,cam_name=cam_name)
-        self.cam_range_name=cam_range_name
+        super().__init__(
+            settings,
+            "pixel_rate",
+            "Pixel rate (MHz)",
+            limit=(0, None),
+            indicator=indicator,
+            factor=1e-6,
+            cam_name=cam_name,
+        )
+        self.cam_range_name = cam_range_name
+
     def setup(self, parameters, full_info):
-        super().setup(parameters,full_info)
+        super().setup(parameters, full_info)
         if self.cam_range_name is not None and self.cam_range_name in full_info:
-            rmin,rmax=full_info[self.cam_range_name][:2]
-            self.base.w[self.gui_name].set_limiter((rmin*self.factor,rmax*self.factor))
+            rmin, rmax = full_info[self.cam_range_name][:2]
+            self.base.w[self.gui_name].set_limiter(
+                (rmin * self.factor, rmax * self.factor)
+            )
 
 
 class GainFloatGUIParameter(cam_gui_parameters.FloatGUIParameter):
@@ -29,83 +40,127 @@ class GainFloatGUIParameter(cam_gui_parameters.FloatGUIParameter):
 
     Same as the basic floating point parameter, but automatically updates limits upon setup.
     """
-    def __init__(self, settings, indicator=False):
-        super().__init__(settings,"master_gain","Gain",limit=(0,None),indicator=indicator,cam_name="gains",to_camera=lambda v: (v,None,None,None),from_camera=lambda v: v[0])
-    def setup(self, parameters, full_info):
-        super().setup(parameters,full_info)
-        if "max_gains" in full_info:
-            self.base.w[self.gui_name].set_limiter((1,full_info["max_gains"][0]))
 
+    def __init__(self, settings, indicator=False):
+        super().__init__(
+            settings,
+            "master_gain",
+            "Gain",
+            limit=(0, None),
+            indicator=indicator,
+            cam_name="gains",
+            to_camera=lambda v: (v, None, None, None),
+            from_camera=lambda v: v[0],
+        )
+
+    def setup(self, parameters, full_info):
+        super().setup(parameters, full_info)
+        if "max_gains" in full_info:
+            self.base.w[self.gui_name].set_limiter((1, full_info["max_gains"][0]))
 
 
 class Settings_GUI(GenericCameraSettings_GUI):
-    _bin_kind="both"
-    _frame_period_kind="value"
+    _bin_kind = "both"
+    _frame_period_kind = "value"
+
     def get_basic_parameters(self, name):
-        if name=="pixel_rate": return PixelRateFloatGUIParameter(self,cam_range_name="pixel_rates_range")
-        if name=="gain": return GainFloatGUIParameter(self)
+        if name == "pixel_rate":
+            return PixelRateFloatGUIParameter(self, cam_range_name="pixel_rates_range")
+        if name == "gain":
+            return GainFloatGUIParameter(self)
         return super().get_basic_parameters(name)
+
     def setup_settings_tables(self):
         super().setup_settings_tables()
-        self.add_builtin_parameter("pixel_rate","advanced")
-        self.add_builtin_parameter("gain","advanced")
+        self.add_builtin_parameter("pixel_rate", "advanced")
+        self.add_builtin_parameter("gain", "advanced")
+
 
 class Status_GUI(GenericCameraStatus_GUI):
     def setup_status_table(self):
-        self.add_num_label("frames_lost",formatter=("int"),label="Frames lost:")
+        self.add_num_label("frames_lost", formatter=("int"), label="Frames lost:")
+
     def show_parameters(self, params):
         super().show_parameters(params)
         if "acq_status" in params:
-            self.v["frames_lost"]=params["acq_status"].transfer_missed
-            self.w["frames_lost"].setStyleSheet("font-weight: bold" if params["acq_status"].transfer_missed else "")
-
-
+            self.v["frames_lost"] = params["acq_status"].transfer_missed
+            self.w["frames_lost"].setStyleSheet(
+                "font-weight: bold" if params["acq_status"].transfer_missed else ""
+            )
 
 
 class UC480CameraDescriptor(ICameraDescriptor):
-    _cam_kind="UC480"
-    _backend_names={"uc480":"Throlabs uc480","ueye":"IDS uEye"}
-    _backend_software={"uc480":"ThorCam","ueye":"IDS uEye"}
+    _cam_kind = "UC480"
+    _backend_names = {"uc480": "Throlabs uc480", "ueye": "IDS uEye"}
+    _backend_software = {"uc480": "ThorCam", "ueye": "IDS uEye"}
 
     @classmethod
     def _iterate_backend(cls, backend, verbose=False):
-        if verbose: print("Searching for {} cameras".format(cls._backend_names[backend]))
+        if verbose:
+            print("Searching for {} cameras".format(cls._backend_names[backend]))
         try:
-            cam_infos=uc480.list_cameras(backend=backend)
+            cam_infos = uc480.list_cameras(backend=backend)
         except (uc480.uc480Error, OSError):
-            if verbose: print("Error loading or running {} library: required software ({}) must be missing\n".format(
-                    backend,cls._backend_software[backend]))
-            if verbose=="full": cls.print_error()
+            if verbose:
+                print(
+                    "Error loading or running {} library: required software ({}) must be missing\n".format(
+                        backend, cls._backend_software[backend]
+                    )
+                )
+            if verbose == "full":
+                cls.print_error()
             return
-        cam_num=len(cam_infos)
+        cam_num = len(cam_infos)
         if not cam_num:
-            if verbose: print("Found no {} cameras\n".format(backend))
+            if verbose:
+                print("Found no {} cameras\n".format(backend))
             return
-        if verbose: print("Found {} {} camera{}".format(cam_num,backend,"s" if cam_num>1 else ""))
+        if verbose:
+            print(
+                "Found {} {} camera{}".format(
+                    cam_num, backend, "s" if cam_num > 1 else ""
+                )
+            )
         for ci in cam_infos:
-            if verbose: print("Found {} camera dev_idx={}, cam_idx={}".format(backend,ci.dev_id,ci.cam_id))
-            if verbose: print("\tModel {}, serial {}".format(ci.model,ci.serial_number))
-            yield None,(backend,ci)
+            if verbose:
+                print(
+                    "Found {} camera dev_idx={}, cam_idx={}".format(
+                        backend, ci.dev_id, ci.cam_id
+                    )
+                )
+            if verbose:
+                print("\tModel {}, serial {}".format(ci.model, ci.serial_number))
+            yield None, (backend, ci)
+
     @classmethod
     def iterate_cameras(cls, verbose=False):
-        for backend in ["uc480","ueye"]:
-            for desc in cls._iterate_backend(backend,verbose=verbose):
+        for backend in ["uc480", "ueye"]:
+            for desc in cls._iterate_backend(backend, verbose=verbose):
                 yield desc
+
     @classmethod
     def generate_description(cls, idx, cam=None, info=None):
-        backend,ci=info
-        cam_desc=cls.build_cam_desc(params={"idx":ci.cam_id,"dev_idx":ci.dev_id,"sn":ci.serial_number,"backend":backend})
-        cam_desc["display_name"]="{} {}".format(ci.model,ci.serial_number)
-        cam_name="{}_{}".format(backend,idx)
-        return cam_name,cam_desc
+        backend, ci = info
+        cam_desc = cls.build_cam_desc(
+            params={
+                "idx": ci.cam_id,
+                "dev_idx": ci.dev_id,
+                "sn": ci.serial_number,
+                "backend": backend,
+            }
+        )
+        cam_desc["display_name"] = "{} {}".format(ci.model, ci.serial_number)
+        cam_name = "{}_{}".format(backend, idx)
+        return cam_name, cam_desc
 
     def get_kind_name(self):
-        return self._backend_names[self.settings.get("params/backend","uc480")]
-    
+        return self._backend_names[self.settings.get("params/backend", "uc480")]
+
     def make_thread(self, name):
-        return UC480CameraThread(name=name,kwargs=self.settings["params"].as_dict())
-    
+        return UC480CameraThread(name=name, kwargs=self.settings["params"].as_dict())
+
     def make_gui_control(self, parent):
-        return Settings_GUI(parent,cam_desc=self)
+        return Settings_GUI(parent, cam_desc=self)
+
     def make_gui_status(self, parent):
-        return Status_GUI(parent,cam_desc=self)
+        return Status_GUI(parent, cam_desc=self)
