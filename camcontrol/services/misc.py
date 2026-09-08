@@ -1,8 +1,8 @@
+import gc
+import threading
+
 from pylablib.core.thread import controller
 from pylablib.core.utils import dictionary
-
-import threading
-import gc
 
 
 class SettingsManager(controller.QTaskThread):
@@ -40,13 +40,10 @@ class SettingsManager(controller.QTaskThread):
         alias = alias or {}
         acquired_settings = []
         for s, (func, asr) in self.sources.items():
-            if ((include is None) or (s in include)) and (
-                (exclude is None) or (s not in exclude)
-            ):
+            if ((include is None) or (s in include)) and ((exclude is None) or (s not in exclude)):
                 acquired_settings.append((s, func(), asr))
         acquired_settings = [
-            (s, (sett.get_value_sync() if asr else sett))
-            for s, sett, asr in acquired_settings
+            (s, (sett.get_value_sync() if asr else sett)) for s, sett, asr in acquired_settings
         ]
         for s, sett in acquired_settings:
             settings.update({alias.get(s, s): sett})
@@ -95,9 +92,7 @@ class EventHooksManager(controller.QTaskThread):
         """Call hook function for the given event with the given arguments"""
         with self._hook_lock:
             calls = self.hooks.setdefault(evt, {}).copy()
-        calls = [
-            f for _, f in sorted(calls.values(), key=(lambda v: v[0]), reverse=True)
-        ]
+        calls = [f for _, f in sorted(calls.values(), key=(lambda v: v[0]), reverse=True)]
         return [c(*args, **kwargs) for c in calls]
 
 
@@ -106,9 +101,7 @@ class GarbageCollector(controller.QTaskThread):
         self.disabled = disabled
         self.periods = dictionary.as_dict(periods or {})
         self.v["enabled"] = not self.disabled
-        self.add_job(
-            "garbage_collect", self.garbage_collect, self.periods.get("default", 2)
-        )
+        self.add_job("garbage_collect", self.garbage_collect, self.periods.get("default", 2))
 
     def garbage_collect(self):
         if self.v["enabled"]:
@@ -159,15 +152,13 @@ class ResourceManager(controller.QTaskThread):
             if kind not in self.resources:
                 self.resources[kind] = {}
             if name in self.resources[kind]:
-                raise ValueError("resource {}/{} already exists".format(kind, name))
+                raise ValueError(f"resource {kind}/{name} already exists")
             self.resources[kind][name] = kwargs
             if ctl is not None:
                 ctl.add_stop_notifier(lambda: self.remove_resource(kind, name))
             value = kwargs.copy()
             self.send_multicast(tag="resource/added", value=(kind, name, value))
-            self.send_multicast(
-                tag="resource/{}/added".format(kind), value=(name, value)
-            )
+            self.send_multicast(tag=f"resource/{kind}/added", value=(name, value))
 
     def get_resource(self, kind, name, default=None):
         """
@@ -200,13 +191,9 @@ class ResourceManager(controller.QTaskThread):
                 self.resources[kind][name].update(kwargs)
                 value = self.resources[kind][name].copy()
                 self.send_multicast(tag="resource/updated", value=(kind, name, value))
-                self.send_multicast(
-                    tag="resource/{}/updated".format(kind), value=(name, value)
-                )
+                self.send_multicast(tag=f"resource/{kind}/updated", value=(name, value))
 
-    def add_multicast_updater(
-        self, kind, name, updater, srcs="any", tags=None, dsts="any"
-    ):
+    def add_multicast_updater(self, kind, name, updater, srcs="any", tags=None, dsts="any"):
         """
         Add auto-updater which updates a resource based on an incoming multicast.
 
@@ -227,7 +214,7 @@ class ResourceManager(controller.QTaskThread):
             if kind in self.resources and name in self.resources[kind]:
                 del self.resources[kind][name]
                 self.send_multicast(tag="resource/removed", value=(kind, name))
-                self.send_multicast(tag="resource/{}/removed".format(kind), value=name)
+                self.send_multicast(tag=f"resource/{kind}/removed", value=name)
                 if kind in self._updaters and name in self._updaters[kind]:
                     sids = self._updaters[kind].pop(name)
                     for s in sids:

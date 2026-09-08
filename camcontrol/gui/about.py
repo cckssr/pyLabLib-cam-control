@@ -1,5 +1,6 @@
-from pylablib.core.gui import QtCore, QtWidgets
 from pylablib import widgets
+from pylablib.core.gui import QtCore, QtWidgets
+
 from .. import version
 
 
@@ -19,32 +20,28 @@ class AboutBox(widgets.QFrameContainer):
         self.setWindowFlag(QtCore.Qt.WindowMinimizeButtonHint, False)
         self.setWindowModality(QtCore.Qt.WindowModal)
         self._increase_font(self.add_decoration_label("PyLabLib cam-control"), 1.6)
-        self._increase_font(
-            self.add_decoration_label("Version {}".format(version)), 1.3
-        )
+        self._increase_font(self.add_decoration_label(f"Version {version}"), 1.3)
         self.add_spacer(10)
         with self.using_new_sublayout("links", "grid"):
             self.add_decoration_label("Documentation")
             link = "https://pylablib-cam-control.readthedocs.io/"
             self.add_decoration_label(
-                "<a href='{link:}'>{link:}</a>".format(link=link), location=(-1, 1)
+                f"<a href='{link}'>{link}</a>", location=(-1, 1)
             ).setOpenExternalLinks(True)
             self.add_decoration_label("Check for a new version")
-            link = (
-                "https://pylablib-cam-control.readthedocs.io/en/latest/changelog.html"
-            )
+            link = "https://pylablib-cam-control.readthedocs.io/en/latest/changelog.html"
             self.add_decoration_label(
-                "<a href='{link:}'>{link:}</a>".format(link=link), location=(-1, 1)
+                f"<a href='{link}'>{link}</a>", location=(-1, 1)
             ).setOpenExternalLinks(True)
             self.add_decoration_label("Report a problem")
             link = "https://github.com/SandoghdarLab/pyLabLib-cam-control/issues"
             self.add_decoration_label(
-                "<a href='{link:}'>{link:}</a>".format(link=link), location=(-1, 1)
+                f"<a href='{link}'>{link}</a>", location=(-1, 1)
             ).setOpenExternalLinks(True)
             self.add_decoration_label("E-mail")
             link = "pylablib@gmail.com"
             self.add_decoration_label(
-                "<a href='mailto: {link:}'>{link:}</a>".format(link=link),
+                f"<a href='mailto: {link}'>{link}</a>",
                 location=(-1, 1),
             ).setOpenExternalLinks(True)
         self.layout().setSizeConstraint(QtWidgets.QLayout.SetFixedSize)

@@ -1,10 +1,10 @@
+from pylablib.core.thread import controller
 from pylablib.devices import Basler
 from pylablib.thread.devices.Basler import BaslerPylonCameraThread
-from pylablib.core.thread import controller
 
-from .base import ICameraDescriptor
-from ..gui import cam_gui_parameters, cam_attributes_browser
+from ..gui import cam_attributes_browser, cam_gui_parameters
 from ..gui.base_cam_ctl_gui import GenericCameraSettings_GUI, GenericCameraStatus_GUI
+from .base import ICameraDescriptor
 
 
 class CamAttributesBrowser(cam_attributes_browser.CamAttributesBrowser):
@@ -83,12 +83,10 @@ class CamAttributesBrowser(cam_attributes_browser.CamAttributesBrowser):
         vis = self.buttons.v["visibility"]
         vis_order = ["simple", "intermediate", "advanced", "invisible", "unknown"]
         for n in self._attributes:
-            vis_pass = vis_order.index(
-                self._attributes[n].attribute.visibility
-            ) <= vis_order.index(vis)
-            self._show_attribute(
-                n, (not quick or self.props_table.v["p_quick", n]) and vis_pass
+            vis_pass = vis_order.index(self._attributes[n].attribute.visibility) <= vis_order.index(
+                vis
             )
+            self._show_attribute(n, (not quick or self.props_table.v["p_quick", n]) and vis_pass)
 
     def setup_parameters(self, full_info):
         super().setup_parameters(full_info)
@@ -101,9 +99,7 @@ class Settings_GUI(GenericCameraSettings_GUI):
     def setup_settings_tables(self):
         super().setup_settings_tables()
         self.add_parameter(
-            cam_gui_parameters.AttributesBrowserGUIParameter(
-                self, CamAttributesBrowser
-            ),
+            cam_gui_parameters.AttributesBrowserGUIParameter(self, CamAttributesBrowser),
             "advanced",
         )
 
@@ -131,32 +127,26 @@ class BaslerPylonCameraDescriptor(ICameraDescriptor):
             return
         cam_num = len(cams)
         if verbose:
-            print(
-                "Found {} Basler camera{}".format(cam_num, "s" if cam_num > 1 else "")
-            )
+            print("Found {} Basler camera{}".format(cam_num, "s" if cam_num > 1 else ""))
         for i, cdesc in enumerate(cams):
             if verbose:
                 print(
-                    "Checking Basler camera idx={}\n\tVendor {},   model {}".format(
-                        i, cdesc.vendor, cdesc.model
-                    )
+                    f"Checking Basler camera idx={i}\n\tVendor {cdesc.vendor},   model {cdesc.model}"
                 )
             yield None, cdesc
 
     @classmethod
     def generate_description(cls, idx, cam=None, info=None):
         cam_desc = cls.build_cam_desc(params={"name": info.name})
-        cam_desc["display_name"] = "{} {}".format(info.vendor, info.model)
-        cam_name = "basler_pylon_{}".format(idx)
+        cam_desc["display_name"] = f"{info.vendor} {info.model}"
+        cam_name = f"basler_pylon_{idx}"
         return cam_name, cam_desc
 
     def get_kind_name(self):
         return "Generic Basler pylon"
 
     def make_thread(self, name):
-        return BaslerPylonCameraThread(
-            name=name, kwargs=self.settings["params"].as_dict()
-        )
+        return BaslerPylonCameraThread(name=name, kwargs=self.settings["params"].as_dict())
 
     def make_gui_control(self, parent):
         return Settings_GUI(parent, cam_desc=self)

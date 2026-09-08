@@ -1,13 +1,13 @@
+from pylablib.core.thread import controller
 from pylablib.devices import IMAQdx
 from pylablib.thread.devices.IMAQdx import (
-    IMAQdxCameraThread,
     EthernetIMAQdxCameraThread,
+    IMAQdxCameraThread,
 )
-from pylablib.core.thread import controller
 
-from .base import ICameraDescriptor
-from ..gui import cam_gui_parameters, cam_attributes_browser
+from ..gui import cam_attributes_browser, cam_gui_parameters
 from ..gui.base_cam_ctl_gui import GenericCameraSettings_GUI, GenericCameraStatus_GUI
+from .base import ICameraDescriptor
 
 
 class EthernetPhotonFocusIMAQdxCameraThread(EthernetIMAQdxCameraThread):
@@ -29,15 +29,10 @@ class EthernetPhotonFocusIMAQdxCameraThread(EthernetIMAQdxCameraThread):
     def _estimate_buffers_num(self):
         if self.device:
             nframes = self.min_buffer_size[1]
-            if (
-                "CameraAttributes/AcquisitionControl/AcquisitionFrameRateMax"
-                in self.device.cav
-            ):
+            if "CameraAttributes/AcquisitionControl/AcquisitionFrameRateMax" in self.device.cav:
                 n_rate = (
                     self.min_buffer_size[0]
-                    * self.device.cav[
-                        "CameraAttributes/AcquisitionControl/AcquisitionFrameRateMax"
-                    ]
+                    * self.device.cav["CameraAttributes/AcquisitionControl/AcquisitionFrameRateMax"]
                 )
                 nframes = max(nframes, n_rate)
             return int(nframes)
@@ -97,9 +92,7 @@ class CamAttributesBrowser(cam_attributes_browser.CamAttributesBrowser):
             self._record_attribute(
                 name, "enum", attribute, indicator=indicator, rng=attribute.ilabels
             )
-            self.add_choice_parameter(
-                name, attribute.name, attribute.ilabels, indicator=indicator
-            )
+            self.add_choice_parameter(name, attribute.name, attribute.ilabels, indicator=indicator)
         elif attribute.kind == "str":
             self._record_attribute(name, "str", attribute, indicator=indicator)
             self.add_string_parameter(name, attribute.name, indicator=indicator)
@@ -119,12 +112,10 @@ class CamAttributesBrowser(cam_attributes_browser.CamAttributesBrowser):
         vis = self.buttons.v["visibility"]
         vis_order = ["simple", "intermediate", "advanced"]
         for n in self._attributes:
-            vis_pass = vis_order.index(
-                self._attributes[n].attribute.visibility
-            ) <= vis_order.index(vis)
-            self._show_attribute(
-                n, (not quick or self.props_table.v["p_quick", n]) and vis_pass
+            vis_pass = vis_order.index(self._attributes[n].attribute.visibility) <= vis_order.index(
+                vis
             )
+            self._show_attribute(n, (not quick or self.props_table.v["p_quick", n]) and vis_pass)
 
     def setup_parameters(self, full_info):
         super().setup_parameters(full_info)
@@ -135,9 +126,7 @@ class Settings_GUI(GenericCameraSettings_GUI):
     def setup_settings_tables(self):
         super().setup_settings_tables()
         self.add_parameter(
-            cam_gui_parameters.AttributesBrowserGUIParameter(
-                self, CamAttributesBrowser
-            ),
+            cam_gui_parameters.AttributesBrowserGUIParameter(self, CamAttributesBrowser),
             "advanced",
         )
 
@@ -165,23 +154,19 @@ class IMAQdxCameraDescriptor(ICameraDescriptor):
             return
         cam_num = len(cams)
         if verbose:
-            print(
-                "Found {} IMAQdx camera{}".format(cam_num, "s" if cam_num > 1 else "")
-            )
+            print("Found {} IMAQdx camera{}".format(cam_num, "s" if cam_num > 1 else ""))
         for i, cdesc in enumerate(cams):
             if verbose:
                 print(
-                    "Checking IMAQdx camera idx={}\n\tVendor {},   model {}".format(
-                        i, cdesc.vendor, cdesc.model
-                    )
+                    f"Checking IMAQdx camera idx={i}\n\tVendor {cdesc.vendor},   model {cdesc.model}"
                 )
             yield None, cdesc
 
     @classmethod
     def _generate_default_description(cls, idx, cam=None, info=None):
         cam_desc = cls.build_cam_desc(params={"name": info.name})
-        cam_desc["display_name"] = "{} {}".format(info.vendor, info.model)
-        cam_name = "imaqdx_{}".format(idx)
+        cam_desc["display_name"] = f"{info.vendor} {info.model}"
+        cam_name = f"imaqdx_{idx}"
         return cam_name, cam_desc
 
     @classmethod
@@ -207,9 +192,7 @@ class EthernetPhotonFocusIMAQdxCameraDescriptor(IMAQdxCameraDescriptor):
 
     @classmethod
     def generate_description(cls, idx, cam=None, info=None):
-        if info.vendor.lower().startswith(
-            "photonfocus"
-        ) and info.model.lower().startswith("hd1"):
+        if info.vendor.lower().startswith("photonfocus") and info.model.lower().startswith("hd1"):
             return super()._generate_default_description(idx, cam=cam, info=info)
 
     def get_kind_name(self):

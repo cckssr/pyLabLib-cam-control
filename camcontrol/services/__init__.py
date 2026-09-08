@@ -1,8 +1,8 @@
 from .framestream import (
-    FrameProcessorThread,
-    FrameBinningThread,
-    FrameSlowdownThread,
     ChannelAccumulator,
+    FrameBinningThread,
+    FrameProcessorThread,
     FrameSaveThread,
+    FrameSlowdownThread,
 )
-from .misc import SettingsManager, EventHooksManager, ResourceManager, GarbageCollector
+from .misc import EventHooksManager, GarbageCollector, ResourceManager, SettingsManager

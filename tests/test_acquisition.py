@@ -42,9 +42,7 @@ def test_full_pipeline_acquires_frames_with_plugins(tmp_path, settings_test_path
                 pass
 
     QtCore.QTimer.singleShot(4000, probe)
-    camapp.main(
-        argv=["--config-file", str(settings_test_path), "--camera", "sim1"], app=app
-    )
+    camapp.main(argv=["--config-file", str(settings_test_path), "--camera", "sim1"], app=app)
 
     assert results["frames_acquired"] > 0
     running = results["running_threads"]

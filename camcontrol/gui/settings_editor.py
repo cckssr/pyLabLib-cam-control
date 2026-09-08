@@ -1,9 +1,9 @@
-from pylablib.core.fileio import loadfile, savefile
-from pylablib.core.gui import QtWidgets, QtCore
-from pylablib.core.thread.controller import exsafe, exsafeSlot
+import os
 
 from pylablib import widgets
-import os
+from pylablib.core.fileio import loadfile, savefile
+from pylablib.core.gui import QtCore, QtWidgets
+from pylablib.core.thread.controller import exsafe, exsafeSlot
 
 
 class SkipParameterError(ValueError):
@@ -33,7 +33,7 @@ class SettingsEditor(widgets.QWidgetContainer):
             QtWidgets.QMessageBox.critical(
                 self,
                 "Missing settings file",
-                "Could not find settings file: {}".format(self.settings_src),
+                f"Could not find settings file: {self.settings_src}",
                 QtWidgets.QMessageBox.Ok,
             )
             self.close()
@@ -41,9 +41,7 @@ class SettingsEditor(widgets.QWidgetContainer):
         self.defined_settings = {}
         self.tabs = self.add_child("tabs", widgets.QTabContainer(self))
         self.cam_tabs = {}
-        self.global_tab = self.tabs.add_tab(
-            "global", "Global", widget=widgets.ParamTable(self)
-        )
+        self.global_tab = self.tabs.add_tab("global", "Global", widget=widgets.ParamTable(self))
         self.setup_settings(self.global_tab)
         for cam in self.settings.get("cameras", {}):
             name = self.settings.get(("cameras", cam, "display_name"), cam)
@@ -79,9 +77,7 @@ class SettingsEditor(widgets.QWidgetContainer):
         )
         self.close()
 
-    def decorate_parameter(
-        self, table: widgets.ParamTable, name, default, descfunc=None
-    ):
+    def decorate_parameter(self, table: widgets.ParamTable, name, default, descfunc=None):
         """Add parameter decoration: description label and (if necessary) enable checkbox"""
         vname = "value/" + name
         table.add_text_label("desc/" + name, "", location=(-1, 4, 1, 1))
@@ -107,9 +103,7 @@ class SettingsEditor(widgets.QWidgetContainer):
                         display_desc(table.v[vname])
                     else:
                         display_desc(
-                            self.global_tab.v[vname]
-                            if vname in self.global_tab
-                            else default
+                            self.global_tab.v[vname] if vname in self.global_tab else default
                         )
 
                 table.vs["enable", name].connect(on_enable)
@@ -119,7 +113,7 @@ class SettingsEditor(widgets.QWidgetContainer):
             if name.startswith("camera/"):
                 pname = "cameras/{}/{}".format(table.camera, name.split("/", 1)[1])
             else:
-                pname = "css/{}/{}".format(table.camera, name)
+                pname = f"css/{table.camera}/{name}"
             self.defined_settings[pname] = (table, name)
         else:
             w = QtWidgets.QCheckBox(
@@ -194,9 +188,7 @@ class SettingsEditor(widgets.QWidgetContainer):
 
     def add_string_parameter(self, table: widgets.ParamTable, name, label, default=""):
         """Add a string settings parameters"""
-        table.add_text_edit(
-            "value/" + name, value=default, label=label, location=("next", 1, 1, 2)
-        )
+        table.add_text_edit("value/" + name, value=default, label=label, location=("next", 1, 1, 2))
         self.decorate_parameter(table, name, default=default)
 
     def add_float_parameter(
@@ -223,9 +215,7 @@ class SettingsEditor(widgets.QWidgetContainer):
         """Setup the settings table in the given widget"""
         table.setup(add_indicator=False)
         cam_table = hasattr(table, "camera")
-        table.add_decoration_label(
-            "Override global" if cam_table else "", location=(0, 0, 1, 2)
-        )
+        table.add_decoration_label("Override global" if cam_table else "", location=(0, 0, 1, 2))
         table.add_spacer(0, 30, location=(0, 0, 1, 1))
         table.add_spacer(0, 200, location=(0, 1, 1, 1))
         table.add_spacer(0, 150, location=(0, 2, 1, 1))
@@ -315,9 +305,7 @@ class SettingsEditor(widgets.QWidgetContainer):
         )
         if cam_table:
             table.add_spacer(10)
-            self.add_string_parameter(
-                table, "camera/display_name", "Camera name", default=None
-            )
+            self.add_string_parameter(table, "camera/display_name", "Camera name", default=None)
             self.add_integer_parameter(
                 table,
                 "camera/params/misc/buffer/min_size/frames",
@@ -364,9 +352,7 @@ class SettingsEditor(widgets.QWidgetContainer):
             if k in self.settings:
                 if ("enable", name) in table:
                     table.v["enable", name] = True
-                table.v["value", name] = self.get_displayed_parameter(
-                    name, self.settings[k]
-                )
+                table.v["value", name] = self.get_displayed_parameter(name, self.settings[k])
 
     def collect_settings(self):
         """Collect settings within the GUI and return their dictionary"""

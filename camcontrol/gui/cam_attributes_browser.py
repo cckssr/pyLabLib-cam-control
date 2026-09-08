@@ -1,9 +1,8 @@
-from pylablib.core.gui import QtWidgets, QtCore, Signal
-from pylablib.core.thread.controller import exsafe, add_exception_hook
+import collections
 
 from pylablib import widgets
-
-import collections
+from pylablib.core.gui import QtCore, QtWidgets, Signal
+from pylablib.core.thread.controller import add_exception_hook, exsafe
 
 TAttribute = collections.namedtuple(
     "TAttribute", ["kind", "attribute", "indicator", "widgets", "rng"]
@@ -20,9 +19,7 @@ class CamAttributesBrowser(widgets.QWidgetContainer):
         self.setWindowFlag(QtCore.Qt.WindowMaximizeButtonHint, False)
         self.setWindowFlag(QtCore.Qt.WindowMinimizeButtonHint, False)
         self.tabs = self.add_child("tabs", widgets.QTabContainer(self))
-        self.values_tab = self.tabs.add_tab(
-            "value", "Values", widget=widgets.ParamTable(self)
-        )
+        self.values_tab = self.tabs.add_tab("value", "Values", widget=widgets.ParamTable(self))
         self.values_tab.setup()
         self.values_scroll_area = self.values_tab.add_child(
             "scroll_area", widgets.QScrollAreaContainer(self)
@@ -32,9 +29,7 @@ class CamAttributesBrowser(widgets.QWidgetContainer):
             lambda: self._move_scroll(self.values_scroll_area)
         )
         values_widget = self.values_scroll_area.widget()
-        self.params_table = values_widget.add_child(
-            "params", widgets.ParamTable(values_widget)
-        )
+        self.params_table = values_widget.add_child("params", widgets.ParamTable(values_widget))
         self.params_table.setup(add_indicator=True)
         for i in range(5):
             self.params_table.add_spacer(0, 70, location=(0, i, 1, 1))
@@ -54,9 +49,7 @@ class CamAttributesBrowser(widgets.QWidgetContainer):
             lambda: self._move_scroll(self.props_scroll_area)
         )
         props_widget = self.props_scroll_area.widget()
-        self.props_table = props_widget.add_child(
-            "params", widgets.ParamTable(props_widget)
-        )
+        self.props_table = props_widget.add_child("params", widgets.ParamTable(props_widget))
         self.props_table.setup(add_indicator=False)
         self.props_table.add_decoration_label("Attribute", location=(0, 0))
         self.props_table.add_decoration_label("On set", location=(0, 1))
@@ -69,9 +62,7 @@ class CamAttributesBrowser(widgets.QWidgetContainer):
         self.buttons = self.add_child("buttons", widgets.ParamTable(self))
         self.buttons.setup(add_indicator=False)
         with self.buttons.using_new_sublayout("buttons", "hbox"):
-            self.buttons.add_check_box(
-                "quick_access", "Show quick access only", value=False
-            )
+            self.buttons.add_check_box("quick_access", "Show quick access only", value=False)
             self.buttons.vs["quick_access"].connect(self.setup_visibility)
             self.buttons.add_padding()
             self.buttons.add_button("close", "Close")
@@ -91,7 +82,7 @@ class CamAttributesBrowser(widgets.QWidgetContainer):
         self._error_raised = False
         self._initial_values = {}
         add_exception_hook(
-            "{}_camera_attributes_window".format(self.cam_ctl.cam_thread),
+            f"{self.cam_ctl.cam_thread}_camera_attributes_window",
             self._on_error,
         )
         self.activate(False)
@@ -173,19 +164,13 @@ class CamAttributesBrowser(widgets.QWidgetContainer):
                 options={"never": "Never", "startup": "Startup", "always": "Always"},
                 location=(-1, 2, 1, 1),
             )
-            self.params_table.vs["s", name].connect(
-                lambda: self._set_camera_attributes(name)
-            )
-            self.params_table.vs["v", name].connect(
-                lambda: self._on_change_attribute(name)
-            )
+            self.params_table.vs["s", name].connect(lambda: self._set_camera_attributes(name))
+            self.params_table.vs["v", name].connect(lambda: self._on_change_attribute(name))
             att.widgets.append(self.params_table.w["e", name])
             att.widgets.append(self.params_table.w["s", name])
             att.widgets.append(self.props_table.w["p_pause", name])
             att.widgets.append(self.props_table.w["p_autoset", name])
-        self.props_table.add_check_box(
-            "p_quick/" + name, caption="", location=(-1, 3, 1, 1)
-        )
+        self.props_table.add_check_box("p_quick/" + name, caption="", location=(-1, 3, 1, 1))
         att.widgets.append(self.props_table.w["p_quick", name])
 
     def _parloc(self, indicator):
@@ -218,11 +203,7 @@ class CamAttributesBrowser(widgets.QWidgetContainer):
 
     def add_choice_parameter(self, name, label, options, default=None, indicator=False):
         """Add a enum attribute row"""
-        options = (
-            options
-            if isinstance(options, dict)
-            else dict(zip(range(len(options)), options))
-        )
+        options = options if isinstance(options, dict) else dict(zip(range(len(options)), options))
         ovals, olabels = list(zip(*options.items()))
         if default is None:
             default = ovals[0]
@@ -247,9 +228,7 @@ class CamAttributesBrowser(widgets.QWidgetContainer):
             )
         self.decorate_parameter(name, label, indicator=indicator)
 
-    def add_integer_parameter(
-        self, name, label, limits=(0, None), default=0, indicator=False
-    ):
+    def add_integer_parameter(self, name, label, limits=(0, None), default=0, indicator=False):
         """Add an integer attribute row"""
         if indicator:
             self.params_table.add_num_label(
@@ -322,12 +301,8 @@ class CamAttributesBrowser(widgets.QWidgetContainer):
     def setup_parameters(self, full_info):
         """Setup parameter rows"""
         if "camera_attributes_desc" in full_info:
-            for n, a in full_info["camera_attributes_desc"].items(
-                leafs=True, path_kind="joined"
-            ):
-                self._add_attribute(
-                    n, a, value=full_info.get(("camera_attributes", n), None)
-                )
+            for n, a in full_info["camera_attributes_desc"].items(leafs=True, path_kind="joined"):
+                self._add_attribute(n, a, value=full_info.get(("camera_attributes", n), None))
 
     def show_window(self):
         """Show the attribute browser window"""
@@ -350,11 +325,7 @@ class CamAttributesBrowser(widgets.QWidgetContainer):
 
     def _update_parameter_range(self, name, attribute):
         rng = self._get_attribute_range(attribute)  # pylint: disable=assignment-from-none
-        if (
-            name in self._attributes
-            and rng is not None
-            and self._attributes[name].rng[0] != rng
-        ):
+        if name in self._attributes and rng is not None and self._attributes[name].rng[0] != rng:
             if self._attributes[name].kind == "float":
                 self.params_table.w["v", name].set_limiter(rng)
             elif self._attributes[name].kind == "int":
@@ -402,9 +373,7 @@ class CamAttributesBrowser(widgets.QWidgetContainer):
             self.params_table.w["e", name].setToolTip("")
         else:
             self.params_table.v["e", name] = "E"
-            self.params_table.w["e", name].setStyleSheet(
-                "QLabel{background: red; color: white}"
-            )
+            self.params_table.w["e", name].setStyleSheet("QLabel{background: red; color: white}")
             self.params_table.w["e", name].setToolTip(str(value))
 
     @exsafe
@@ -414,9 +383,7 @@ class CamAttributesBrowser(widgets.QWidgetContainer):
 
     def update_attributes(self):
         """Update all attribute indicators"""
-        self._activity_state = (
-            "on" if self._activity_state == "updated" else self._activity_state
-        )
+        self._activity_state = "on" if self._activity_state == "updated" else self._activity_state
         active = self._activity_state == "on"
         self.tabs.setEnabled(active)
         self.buttons.set_enabled("quick_access", active)
@@ -457,10 +424,7 @@ class CamAttributesBrowser(widgets.QWidgetContainer):
 
     @exsafe
     def _on_change_attribute(self, name):
-        if (
-            not self._autoset_paused
-            and self.props_table.v["p_autoset", name] == "always"
-        ):
+        if not self._autoset_paused and self.props_table.v["p_autoset", name] == "always":
             self._set_camera_attributes([name])
 
     def _setup_attributes_update(self, active):
@@ -504,9 +468,7 @@ class CamAttributesBrowser(widgets.QWidgetContainer):
             self._autoset_paused = False
 
     def get_all_values(self):
-        values = (
-            super().get_all_values() if not self._error_raised else self._initial_values
-        )
+        values = super().get_all_values() if not self._error_raised else self._initial_values
         if "e" in values:
             del values["e"]
         return values

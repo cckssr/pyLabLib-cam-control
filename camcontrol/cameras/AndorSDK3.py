@@ -1,13 +1,13 @@
 from pylablib.devices import Andor
 from pylablib.thread.devices.Andor import (
     AndorSDK3CameraThread,
-    AndorSDK3ZylaThread,
     AndorSDK3NeoThread,
+    AndorSDK3ZylaThread,
 )
 
-from .base import ICameraDescriptor
-from ..gui import cam_gui_parameters, cam_attributes_browser
+from ..gui import cam_attributes_browser, cam_gui_parameters
 from ..gui.base_cam_ctl_gui import GenericCameraSettings_GUI, GenericCameraStatus_GUI
+from .base import ICameraDescriptor
 
 
 class CamAttributesBrowser(cam_attributes_browser.CamAttributesBrowser):
@@ -72,9 +72,7 @@ class Settings_GUI(GenericCameraSettings_GUI):
     def setup_settings_tables(self):
         super().setup_settings_tables()
         self.add_parameter(
-            cam_gui_parameters.AttributesBrowserGUIParameter(
-                self, CamAttributesBrowser
-            ),
+            cam_gui_parameters.AttributesBrowserGUIParameter(self, CamAttributesBrowser),
             "advanced",
         )
 
@@ -82,9 +80,7 @@ class Settings_GUI(GenericCameraSettings_GUI):
 class Status_GUI(GenericCameraStatus_GUI):
     def setup_status_table(self):
         super().setup_status_table()
-        self.add_num_label(
-            "buffer_overflows", formatter="int", label="Buffer overflows:"
-        )
+        self.add_num_label("buffer_overflows", formatter="int", label="Buffer overflows:")
 
     def show_parameters(self, params):
         super().show_parameters(params)
@@ -131,19 +127,15 @@ class AndorSDK3CameraDescriptor(ICameraDescriptor):
                 print("Found no Andor SDK3 cameras\n")
             return
         if verbose:
-            print(
-                "Found {} Andor SDK3 camera{}".format(
-                    cam_num, "s" if cam_num > 1 else ""
-                )
-            )
+            print("Found {} Andor SDK3 camera{}".format(cam_num, "s" if cam_num > 1 else ""))
         for i in range(cam_num):
             try:
                 if verbose:
-                    print("Found Andor SDK3 camera idx={}".format(i))
+                    print(f"Found Andor SDK3 camera idx={i}")
                 with Andor.AndorSDK3Camera(idx=i) as cam:
                     device_info = cam.get_device_info()
                     if verbose:
-                        print("\tModel {}".format(device_info.camera_model))
+                        print(f"\tModel {device_info.camera_model}")
                     yield cam, None
             except Andor.AndorError:
                 if verbose == "full":
@@ -153,19 +145,15 @@ class AndorSDK3CameraDescriptor(ICameraDescriptor):
     def generate_description(cls, idx, cam=None, info=None):
         device_info = cam.get_device_info()
         cam_desc = cls.build_cam_desc(params={"idx": idx})
-        cam_desc["display_name"] = "Andor {} {}".format(
-            device_info.camera_model, device_info.serial_number
-        )
-        cam_name = "andor_sdk3_{}".format(idx)
+        cam_desc["display_name"] = f"Andor {device_info.camera_model} {device_info.serial_number}"
+        cam_name = f"andor_sdk3_{idx}"
         return cam_name, cam_desc
 
     def get_kind_name(self):
         return "Generic Andor SDK3"
 
     def make_thread(self, name):
-        return AndorSDK3CameraThread(
-            name=name, kwargs=self.settings["params"].as_dict()
-        )
+        return AndorSDK3CameraThread(name=name, kwargs=self.settings["params"].as_dict())
 
     def make_gui_control(self, parent):
         return Settings_GUI(parent, cam_desc=self)

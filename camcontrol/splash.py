@@ -1,7 +1,7 @@
-from PyQt5 import QtWidgets, QtCore, QtGui
-
-import sys
 import ctypes
+import sys
+
+from PyQt5 import QtCore, QtGui, QtWidgets
 
 from camcontrol import version
 from camcontrol.resources import resource_path
@@ -43,7 +43,7 @@ class SplashScreen(QtWidgets.QSplashScreen):
         self.layout().setContentsMargins(5, 5, 5, 5)
         self.vlabel = QtWidgets.QLabel(self)
         self.vlabel.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignBottom)
-        self.vlabel.setText("PyLabLib cam-control\nVersion {}".format(version))
+        self.vlabel.setText(f"PyLabLib cam-control\nVersion {version}")
         self.vlabel.setStyle(self.current_style)
         self.layout().addWidget(self.vlabel)
         self.vlabel.setFont(self.current_font)

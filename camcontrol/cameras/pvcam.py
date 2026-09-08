@@ -1,10 +1,10 @@
+from pylablib.core.utils import dictionary
 from pylablib.devices import Photometrics
 from pylablib.thread.devices.Photometrics import PvcamCameraThread
-from pylablib.core.utils import dictionary
 
-from .base import ICameraDescriptor
+from ..gui import cam_attributes_browser, cam_gui_parameters
 from ..gui.base_cam_ctl_gui import GenericCameraSettings_GUI, GenericCameraStatus_GUI
-from ..gui import cam_gui_parameters, cam_attributes_browser
+from .base import ICameraDescriptor
 
 
 class TriggerModeParameter(cam_gui_parameters.IGUIParameter):
@@ -131,12 +131,9 @@ class ReadoutModeParameter(cam_gui_parameters.EnumGUIParameter):
         if "readout_modes" in full_info:
             readout_modes = full_info["readout_modes"]
             options = [
-                "{}, {:.0f}MHz, {}".format(m.port_name, m.speed_freq / 1e6, m.gain_name)
-                for m in readout_modes
+                f"{m.port_name}, {m.speed_freq / 1e6:.0f}MHz, {m.gain_name}" for m in readout_modes
             ]
-            index_values = [
-                (m.port_idx, m.speed_idx, m.gain_idx) for m in readout_modes
-            ]
+            index_values = [(m.port_idx, m.speed_idx, m.gain_idx) for m in readout_modes]
             self.base.w[self.gui_name].set_options(
                 options, index_values=index_values, value=index_values[0]
             )
@@ -190,9 +187,7 @@ class CamAttributesBrowser(cam_attributes_browser.CamAttributesBrowser):
             self._record_attribute(
                 name, "enum", attribute, indicator=indicator, rng=attribute.ilabels
             )
-            self.add_choice_parameter(
-                name, attribute.name, attribute.ilabels, indicator=indicator
-            )
+            self.add_choice_parameter(name, attribute.name, attribute.ilabels, indicator=indicator)
         elif attribute.kind == "CHAR_PTR":
             self._record_attribute(name, "str", attribute, indicator=indicator)
             self.add_string_parameter(name, attribute.name, indicator=indicator)
@@ -243,9 +238,7 @@ class Settings_GUI(GenericCameraSettings_GUI):
         self.add_parameter(ClearModeParameter(self), "advanced")
         self.add_parameter(ClearCyclesParameter(self), "advanced")
         self.add_parameter(
-            cam_gui_parameters.AttributesBrowserGUIParameter(
-                self, CamAttributesBrowser
-            ),
+            cam_gui_parameters.AttributesBrowserGUIParameter(self, CamAttributesBrowser),
             "advanced",
         )
 
@@ -280,14 +273,12 @@ class PvcamCameraDescriptor(ICameraDescriptor):
                     device_info = cam.get_device_info()
                     if verbose:
                         print(
-                            "Found Pvcam camera name={}, product {}, serial {}".format(
-                                name, device_info.product, device_info.serial
-                            )
+                            f"Found Pvcam camera name={name}, product {device_info.product}, serial {device_info.serial}"
                         )
                     yield cam, name
             except Photometrics.PvcamError:
                 if verbose:
-                    print("Could not open Pvcam camera name={}".format(name))
+                    print(f"Could not open Pvcam camera name={name}")
                 if verbose == "full":
                     cls.print_error()
 
@@ -298,7 +289,7 @@ class PvcamCameraDescriptor(ICameraDescriptor):
         cam_desc["display_name"] = " ".join(
             s for s in [device_info.vendor, device_info.system, device_info.serial] if s
         )
-        cam_name = "pvcam_{}".format(idx)
+        cam_name = f"pvcam_{idx}"
         return cam_name, cam_desc
 
     def get_kind_name(self):

@@ -1,12 +1,12 @@
-from . import base
-
-from pylablib.core.thread import controller
-from pylablib.core.utils import net, dictionary, general, py3
-from pylablib.thread.stream.stream_message import FramesAccumulator
-from pylablib.thread.stream.stream_manager import StreamIDCounter
+import json
 
 import numpy as np
-import json
+from pylablib.core.thread import controller
+from pylablib.core.utils import dictionary, general, net, py3
+from pylablib.thread.stream.stream_manager import StreamIDCounter
+from pylablib.thread.stream.stream_message import FramesAccumulator
+
+from . import base
 
 
 class IncomingMessageError(IOError):
@@ -16,7 +16,7 @@ class IncomingMessageError(IOError):
         self.kind = kind
         self.desc = desc
         self.err_args = args
-        msg = "{} ({})".format(kind, desc) if desc else kind
+        msg = f"{kind} ({desc})" if desc else kind
         super().__init__(msg)
 
 
@@ -36,9 +36,7 @@ class ServerCommThread(controller.QTaskThread):
         self.plugin = plugin
         self.peer_name = socket.get_peer_name()
         self.add_job("check_message", self.check_message, 0, initial_call=False)
-        self.subscribe_commsync(
-            self.receive_frames, **plugin.get_frame_stream_parameters()
-        )
+        self.subscribe_commsync(self.receive_frames, **plugin.get_frame_stream_parameters())
         self.frames_cnt = StreamIDCounter()
         self.frames_accum = FramesAccumulator()
         self.frames_accum_size = 0
@@ -70,18 +68,18 @@ class ServerCommThread(controller.QTaskThread):
         If `branch` and `desc` are specified, they are used to generate error messages.
         `dtype` can specify the expected value type: ``"int"``, ``"float"``, ``"str"``, a tuple, or a list of datatypes.
         """
-        full_key = "{}/{}".format(branch, key) if branch else key
-        branch = " '{}'".format(branch) if branch else ""
+        full_key = f"{branch}/{key}" if branch else key
+        branch = f" '{branch}'" if branch else ""
         if not dictionary.is_dictionary(msg, generic=True):
             raise IncomingMessageError(
                 "wrong_type",
-                desc="Message value {} is not a dictionary".format(branch),
+                desc=f"Message value {branch} is not a dictionary",
                 args={"branch": branch.strip()},
             )
         if key not in msg:
             raise IncomingMessageError(
                 "missing_argument",
-                desc=desc or "Missing value '{}'".format(full_key),
+                desc=desc or f"Missing value '{full_key}'",
                 args={
                     "key": full_key,
                 },
@@ -90,7 +88,7 @@ class ServerCommThread(controller.QTaskThread):
         if dtype is not None and not self._check_value_type(value, dtype):
             raise IncomingMessageError(
                 "wrong_type",
-                desc=desc or "Wrong type of value '{}'".format(full_key),
+                desc=desc or f"Wrong type of value '{full_key}'",
                 args={"key": full_key, "value": value, "dtype": dtype},
             )
         return value
@@ -142,13 +140,9 @@ class ServerCommThread(controller.QTaskThread):
             return msg
         msg = dictionary.Dictionary(msg)
         if "payload" in msg:
-            shape = self.get_message_key(
-                msg["payload"], "shape", "branch", dtype=["int"]
-            )
+            shape = self.get_message_key(msg["payload"], "shape", "branch", dtype=["int"])
             dtype = self.get_message_key(msg["payload"], "dtype", "branch", dtype="str")
-            nbytes = msg.get(
-                "payload/nbytes", np.prod(shape) * np.dtype(dtype).itemsize
-            )
+            nbytes = msg.get("payload/nbytes", np.prod(shape) * np.dtype(dtype).itemsize)
             try:
                 payload = self.socket.recv_fixedlen(nbytes)
                 payload = np.frombuffer(payload, dtype=dtype).reshape(shape)
@@ -195,9 +189,7 @@ class ServerCommThread(controller.QTaskThread):
                 raise IncomingMessageError(
                     "wrong_type", "Arguments must be a dictionary", {"value": args}
                 )
-            kind, rname = (
-                name.split("/", maxsplit=1) if name.find("/") >= 0 else ("", name)
-            )
+            kind, rname = name.split("/", maxsplit=1) if name.find("/") >= 0 else ("", name)
             if kind == "gui":
                 result = self.process_gui_request(rname, args)
             elif kind == "save":
@@ -211,7 +203,7 @@ class ServerCommThread(controller.QTaskThread):
             else:
                 raise IncomingMessageError(
                     "wrong_request",
-                    "Unrecognized request '{}'".format(name),
+                    f"Unrecognized request '{name}'",
                     {"value": name},
                 )
             if not dictionary.is_dictionary(result, generic=True):
@@ -222,7 +214,7 @@ class ServerCommThread(controller.QTaskThread):
         else:
             raise IncomingMessageError(
                 "wrong_purpose",
-                "Unrecognized purpose '{}'".format(purpose),
+                f"Unrecognized purpose '{purpose}'",
                 {"value": purpose},
             )
         if result is not None:
@@ -248,7 +240,7 @@ class ServerCommThread(controller.QTaskThread):
             except KeyError:
                 raise IncomingMessageError(
                     "wrong_argument",
-                    "Could not find gui {} '{}'".format(name[4:], value_name),
+                    f"Could not find gui {name[4:]} '{value_name}'",
                     {"value": value_name},
                 )
             return {"name": value_name, "value": self._as_dict(result)}
@@ -260,21 +252,19 @@ class ServerCommThread(controller.QTaskThread):
             except KeyError:
                 raise IncomingMessageError(
                     "wrong_argument",
-                    "Could not find gui {} '{}'".format(name[4:], value_name),
+                    f"Could not find gui {name[4:]} '{value_name}'",
                     {"value": value_name},
                 )
             except (ValueError, TypeError):
                 raise IncomingMessageError(
                     "wrong_type",
-                    "Wrong type for the supplied value of gui {} '{}'".format(
-                        name[4:], value_name
-                    ),
+                    f"Wrong type for the supplied value of gui {name[4:]} '{value_name}'",
                     {"value": value},
                 )
             return {"name": value_name, "value": self._as_dict(result)}
         raise IncomingMessageError(
             "wrong_request",
-            "Unrecognized gui request '{}'".format(name),
+            f"Unrecognized gui request '{name}'",
             {"value": name},
         )
 
@@ -295,13 +285,11 @@ class ServerCommThread(controller.QTaskThread):
             return "success"
         if name == "snap":
             source = args.get("source")
-            self.plugin.save_control(
-                mode="snap", start=True, source=source, params=args
-            )
+            self.plugin.save_control(mode="snap", start=True, source=source, params=args)
             return "success"
         raise IncomingMessageError(
             "wrong_request",
-            "Unrecognized save request '{}'".format(name),
+            f"Unrecognized save request '{name}'",
             {"value": name},
         )
 
@@ -318,7 +306,7 @@ class ServerCommThread(controller.QTaskThread):
             except KeyError:
                 raise IncomingMessageError(
                     "wrong_argument",
-                    "Could not find camera parameter '{}'".format(value_name),
+                    f"Could not find camera parameter '{value_name}'",
                     {"value": value_name},
                 )
         if name == "param/set":
@@ -329,7 +317,7 @@ class ServerCommThread(controller.QTaskThread):
             return "success"
         raise IncomingMessageError(
             "wrong_request",
-            "Unrecognized camera request '{}'".format(name),
+            f"Unrecognized camera request '{name}'",
             {"value": name},
         )
 
@@ -345,7 +333,7 @@ class ServerCommThread(controller.QTaskThread):
             return {"payload": self.plugin.proc_control(name)}
         raise IncomingMessageError(
             "wrong_request",
-            "Unrecognized processing request '{}'".format(name),
+            f"Unrecognized processing request '{name}'",
             {"value": name},
         )
 
@@ -386,9 +374,7 @@ class ServerCommThread(controller.QTaskThread):
                 }
         elif name == "buffer/read":
             if "n" in args:
-                nread = self.get_message_key(
-                    args, "n", branch="parameters/args", dtype="int"
-                )
+                nread = self.get_message_key(args, "n", branch="parameters/args", dtype="int")
             else:
                 nread = None
             n = self.frames_accum.nframes()
@@ -439,9 +425,7 @@ class ServerPlugin(base.IPlugin):
     def setup_gui(self):
         self.table = self.gui.add_plugin_box("server", "Server", index=100)
         self.table.add_text_label("ip", label="IP address")
-        self.table.add_num_label(
-            "nconn", label="Number of connections", formatter=".0f"
-        )
+        self.table.add_num_label("nconn", label="Number of connections", formatter=".0f")
 
     @controller.call_in_gui_thread
     def update_gui(self, ip=None, nconn=0):
@@ -536,10 +520,7 @@ class ServerPlugin(base.IPlugin):
                     ]
                 }
                 status.update(
-                    {
-                        k: proc.v[k].as_dict()
-                        for k in ["snapshot/parameters", "running/parameters"]
-                    }
+                    {k: proc.v[k].as_dict() for k in ["snapshot/parameters", "running/parameters"]}
                 )
                 return status
             if op == "get_full_status":

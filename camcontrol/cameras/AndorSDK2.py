@@ -1,13 +1,11 @@
 from pylablib.devices import Andor
 from pylablib.thread.devices.Andor import (
     AndorSDK2CameraThread,
-    AndorSDK2LucaThread,
-    AndorSDK2IXONThread,
 )
 
-from .base import ICameraDescriptor
 from ..gui import cam_gui_parameters
 from ..gui.base_cam_ctl_gui import GenericCameraSettings_GUI, GenericCameraStatus_GUI
+from .base import ICameraDescriptor
 
 
 class AmpModeParameter(cam_gui_parameters.IGUIParameter):
@@ -20,9 +18,7 @@ class AmpModeParameter(cam_gui_parameters.IGUIParameter):
     def add(self, base):
         self.base = base
         base.add_combo_box("channel", label="Channel")
-        base.add_combo_box(
-            "oamp", label="Output amplifier", location={"indicator": "next_line"}
-        )
+        base.add_combo_box("oamp", label="Output amplifier", location={"indicator": "next_line"})
         base.add_combo_box("hsspeed", label="Horiz. scan speed")
         base.add_combo_box("preamp", label="Preamp gain", options={1: "1.0"})
         self.connect_updater(["channel", "oamp", "hsspeed", "preamp"])
@@ -35,24 +31,22 @@ class AmpModeParameter(cam_gui_parameters.IGUIParameter):
         valid_amp_modes = self.amp_modes
         self._update_options(
             self.base.w["channel"],
-            {am[0]: "{}: {}bit".format(am[0], am[1]) for am in valid_amp_modes},
+            {am[0]: f"{am[0]}: {am[1]}bit" for am in valid_amp_modes},
         )
         self.base.i["channel"] = amp_mode[0]
         valid_amp_modes = [am for am in valid_amp_modes if am[0] == amp_mode[0]]
-        self._update_options(
-            self.base.w["oamp"], {am[2]: am[3] for am in valid_amp_modes}
-        )
+        self._update_options(self.base.w["oamp"], {am[2]: am[3] for am in valid_amp_modes})
         self.base.i["oamp"] = amp_mode[1]
         valid_amp_modes = [am for am in valid_amp_modes if am[2] == amp_mode[1]]
         self._update_options(
             self.base.w["hsspeed"],
-            {am[4]: "{:.1f} MHz".format(am[5]) for am in valid_amp_modes},
+            {am[4]: f"{am[5]:.1f} MHz" for am in valid_amp_modes},
         )
         self.base.i["hsspeed"] = amp_mode[2]
         valid_amp_modes = [am for am in valid_amp_modes if am[4] == amp_mode[2]]
         self._update_options(
             self.base.w["preamp"],
-            {am[6]: "{:.1f}".format(am[7]) for am in valid_amp_modes},
+            {am[6]: f"{am[7]:.1f}" for am in valid_amp_modes},
         )
         self.base.i["preamp"] = amp_mode[3]
         self.curr_mode = amp_mode
@@ -70,9 +64,7 @@ class AmpModeParameter(cam_gui_parameters.IGUIParameter):
             self.base.set_enabled(["channel", "oamp", "hsspeed", "preamp"], False)
             return
         self.amp_modes = full_info["amp_modes"]
-        self._display_amp_modes(
-            [self.amp_modes[0][i] for i in [0, 2, 4, 6]], update_control=True
-        )
+        self._display_amp_modes([self.amp_modes[0][i] for i in [0, 2, 4, 6]], update_control=True)
 
     def collect(self, parameters):
         if not self.disabled:
@@ -105,9 +97,7 @@ class VSSpeedParameter(cam_gui_parameters.EnumGUIParameter):
     def setup(self, parameters, full_info):
         super().setup(parameters, full_info)
         if "vsspeeds" in full_info:
-            vsspeeds = {
-                k: "{:.1f} us".format(v) for k, v in enumerate(full_info["vsspeeds"])
-            }
+            vsspeeds = {k: f"{v:.1f} us" for k, v in enumerate(full_info["vsspeeds"])}
             self.base.w[self.gui_name].set_options(vsspeeds, index=0)
         else:
             self.disable()
@@ -167,9 +157,7 @@ class Settings_GUI(GenericCameraSettings_GUI):
                 self, "fan_mode", "Fan", {"off": "Off", "low": "Low", "full": "Full"}
             )
         if name == "cooler":
-            return cam_gui_parameters.BoolGUIParameter(
-                self, "cooler", "Cooler", default=True
-            )
+            return cam_gui_parameters.BoolGUIParameter(self, "cooler", "Cooler", default=True)
         if name == "temperature":
             return TemperatureParameter(self)
         return super().get_basic_parameters(name)
@@ -207,9 +195,7 @@ class Status_GUI(GenericCameraStatus_GUI):
             "stabilized": "Stable",
         }
         if "temperature_status" in params:
-            self.v["temperature_status"] = temp_status_text[
-                params["temperature_status"]
-            ]
+            self.v["temperature_status"] = temp_status_text[params["temperature_status"]]
 
 
 class AndorSDK2CameraDescriptor(ICameraDescriptor):
@@ -234,19 +220,15 @@ class AndorSDK2CameraDescriptor(ICameraDescriptor):
                 print("Found no Andor SDK2 cameras\n")
             return
         if verbose:
-            print(
-                "Found {} Andor SDK2 camera{}".format(
-                    cam_num, "s" if cam_num > 1 else ""
-                )
-            )
+            print("Found {} Andor SDK2 camera{}".format(cam_num, "s" if cam_num > 1 else ""))
         for i in range(cam_num):
             try:
                 if verbose:
-                    print("Found Andor SDK2 camera idx={}".format(i))
+                    print(f"Found Andor SDK2 camera idx={i}")
                 with Andor.AndorSDK2Camera(idx=i) as cam:
                     device_info = cam.get_device_info()
                     if verbose:
-                        print("\tModel {}".format(device_info.head_model))
+                        print(f"\tModel {device_info.head_model}")
                     yield cam, None
             except Andor.AndorError:
                 if verbose == "full":
@@ -256,19 +238,15 @@ class AndorSDK2CameraDescriptor(ICameraDescriptor):
     def generate_description(cls, idx, cam=None, info=None):
         device_info = cam.get_device_info()
         cam_desc = cls.build_cam_desc(params={"idx": idx})
-        cam_desc["display_name"] = "Andor {} {}".format(
-            device_info.head_model, device_info.serial_number
-        )
-        cam_name = "andor_sdk2_{}".format(idx)
+        cam_desc["display_name"] = f"Andor {device_info.head_model} {device_info.serial_number}"
+        cam_name = f"andor_sdk2_{idx}"
         return cam_name, cam_desc
 
     def get_kind_name(self):
         return "Generic Andor SDK2"
 
     def make_thread(self, name):
-        return AndorSDK2CameraThread(
-            name=name, kwargs=self.settings["params"].as_dict()
-        )
+        return AndorSDK2CameraThread(name=name, kwargs=self.settings["params"].as_dict())
 
     def make_gui_control(self, parent):
         return Settings_GUI(parent, cam_desc=self)

@@ -140,22 +140,16 @@ class FramePreproccessSlowdown_GUI(container.QGroupBoxContainer):
             value=100,
             label="Slowdown buffer:",
         )
-        self.params.add_toggle_button(
-            "slowdown_enabled", caption="Slowdown", add_indicator=False
-        )
+        self.params.add_toggle_button("slowdown_enabled", caption="Slowdown", add_indicator=False)
 
         @controller.exsafe
         def setup_slowdown():
-            self.frame_slowdown.ca.setup_slowdown(
-                self.v["slowdown_fps"], self.v["slowdown_buffer"]
-            )
+            self.frame_slowdown.ca.setup_slowdown(self.v["slowdown_fps"], self.v["slowdown_buffer"])
 
         for ctl in ["slowdown_fps", "slowdown_buffer"]:
             self.params.vs[ctl].connect(setup_slowdown)
         setup_slowdown()
-        self.params.vs["slowdown_enabled"].connect(
-            lambda v: self.frame_slowdown.ca.enable(v)
-        )
+        self.params.vs["slowdown_enabled"].connect(lambda v: self.frame_slowdown.ca.enable(v))
         self.params.add_padding("horizontal", location=(0, "next", "end", 1))
         self.params.layout().setColumnStretch(1, 0)
         for ctl in ["slowdown_fps", "slowdown_buffer"]:

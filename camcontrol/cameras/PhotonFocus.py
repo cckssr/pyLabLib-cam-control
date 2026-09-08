@@ -1,17 +1,19 @@
-from pylablib.devices import PhotonFocus, IMAQ, SiliconSoftware, BitFlow
-from pylablib.thread.devices.PhotonFocus import (
-    IMAQPhotonFocusCameraThread as BaseIMAQPhotonFocusCameraThread,
-    SiliconSoftwarePhotonFocusCameraThread,
-    BitFlowPhotonFocusCameraThread,
-)
-from pylablib.core.thread import controller
-
-from .base import ICameraDescriptor
-from ..gui import cam_gui_parameters, cam_attributes_browser
-from ..gui.base_cam_ctl_gui import GenericCameraSettings_GUI, GenericCameraStatus_GUI
-
 import glob
 import re
+
+from pylablib.core.thread import controller
+from pylablib.devices import IMAQ, BitFlow, PhotonFocus, SiliconSoftware
+from pylablib.thread.devices.PhotonFocus import (
+    BitFlowPhotonFocusCameraThread,
+    SiliconSoftwarePhotonFocusCameraThread,
+)
+from pylablib.thread.devices.PhotonFocus import (
+    IMAQPhotonFocusCameraThread as BaseIMAQPhotonFocusCameraThread,
+)
+
+from ..gui import cam_attributes_browser, cam_gui_parameters
+from ..gui.base_cam_ctl_gui import GenericCameraSettings_GUI, GenericCameraStatus_GUI
+from .base import ICameraDescriptor
 
 
 class IMAQPhotonFocusCameraThread(BaseIMAQPhotonFocusCameraThread):
@@ -228,9 +230,7 @@ class PhotonFocusCameraSettings_GUI(GenericCameraSettings_GUI):
                 factor=1e3,
             )
         if name == "roi":
-            return ROIGUIParameter(
-                self, bin_kind=self._bin_kind, roi_kind=self._roi_kind
-            )
+            return ROIGUIParameter(self, bin_kind=self._bin_kind, roi_kind=self._roi_kind)
         if name == "cfr":
             return cam_gui_parameters.BoolGUIParameter(
                 self, "cfr", "Constant frame rate", default=True
@@ -266,18 +266,12 @@ class PhotonFocusCameraSettings_GUI(GenericCameraSettings_GUI):
         self.add_builtin_parameter("bl_offset", "advanced")
         self.add_builtin_parameter("trigger_interleave", "advanced")
         self.add_builtin_parameter("status_line", "advanced").allow_diff_update = True
-        self.add_builtin_parameter(
-            "perform_status_check", "advanced"
-        ).allow_diff_update = True
+        self.add_builtin_parameter("perform_status_check", "advanced").allow_diff_update = True
         self.advanced_params.vs["status_line"].connect(
-            controller.exsafe(
-                lambda v: self.advanced_params.set_enabled("perform_status_check", v)
-            )
+            controller.exsafe(lambda v: self.advanced_params.set_enabled("perform_status_check", v))
         )
         self.add_parameter(
-            cam_gui_parameters.AttributesBrowserGUIParameter(
-                self, CamAttributesBrowser
-            ),
+            cam_gui_parameters.AttributesBrowserGUIParameter(self, CamAttributesBrowser),
             "advanced",
         )
 
@@ -319,9 +313,7 @@ class PhotonFocusIMAQCameraSettings_GUI(PhotonFocusCameraSettings_GUI):
         super().show_parameters(parameters)
         if "trigger_mode" in parameters:
             self.i["output_vsync"] = parameters["trigger_mode"] == "out"
-            self.i["trigger_mode"] = (
-                "ext" if parameters["trigger_mode"] == "in_ext" else "int"
-            )
+            self.i["trigger_mode"] = "ext" if parameters["trigger_mode"] == "in_ext" else "int"
 
 
 class PhotonFocusSiliconSoftwareCameraSettings_GUI(PhotonFocusCameraSettings_GUI):
@@ -340,13 +332,9 @@ class PhotonFocusCameraStatus_GUI(GenericCameraStatus_GUI):
         super().show_parameters(params)
         if "buffer_status" in params:
             bstat = params["buffer_status"]
-            self.v["frames/buffstat"] = "{:d} / {:d}".format(
-                bstat.unread or 0, bstat.size or 0
-            )
+            self.v["frames/buffstat"] = f"{bstat.unread or 0:d} / {bstat.size or 0:d}"
             self.v["frames_lost"] = bstat.lost
-            self.w["frames_lost"].setStyleSheet(
-                "font-weight: bold" if bstat.lost else ""
-            )
+            self.w["frames_lost"].setStyleSheet("font-weight: bold" if bstat.lost else "")
 
 
 class PhotonFocusCameraDescriptor(ICameraDescriptor):
@@ -376,41 +364,31 @@ class PhotonFocusCameraDescriptor(ICameraDescriptor):
         if verbose:
             print(
                 "Checking potential PFRemote interfaces {}\n".format(
-                    ", ".join(
-                        ["{}/{}".format(d.manufacturer, d.port) for _, d in pf_cams]
-                    )
+                    ", ".join([f"{d.manufacturer}/{d.port}" for _, d in pf_cams])
                 )
             )
         cams = []
         for p, cdesc in pf_cams:
             if verbose:
                 print(
-                    "Checking interface {}/{} ... ".format(
-                        cdesc.manufacturer, cdesc.port
-                    ),
+                    f"Checking interface {cdesc.manufacturer}/{cdesc.port} ... ",
                     end="",
                 )
             name = PhotonFocus.query_camera_name(p)
             if name is not None:
                 if verbose:
-                    print("discovered camera {}".format(name))
+                    print(f"discovered camera {name}")
                 cams.append((p, cdesc))
             else:
                 if verbose:
                     print("not a camera")
         cam_num = len(cams)
         if verbose:
-            print(
-                "Found {} PhotonFocus camera{}".format(
-                    cam_num, "s" if cam_num > 1 else ""
-                )
-            )
+            print("Found {} PhotonFocus camera{}".format(cam_num, "s" if cam_num > 1 else ""))
         for p, cdesc in cams:
             if verbose:
                 print(
-                    "Checking PhotonFocus camera idx={}\n\tPort {},   vendor {},   model {}".format(
-                        p, cdesc.port, cdesc.manufacturer, name
-                    )
+                    f"Checking PhotonFocus camera idx={p}\n\tPort {cdesc.port},   vendor {cdesc.manufacturer},   model {name}"
                 )
             yield None, (p, cdesc)
 
@@ -444,17 +422,15 @@ class PhotonFocusIMAQCameraDescriptor(PhotonFocusCameraDescriptor):
         pfcam_port = (cdesc.manufacturer, cdesc.port)
         name = PhotonFocus.query_camera_name(port)
         cam_desc = cls.build_cam_desc({"pfcam_port": pfcam_port})
-        cam_desc["display_name"] = "{} port {}".format(name, port)
+        cam_desc["display_name"] = f"{name} port {port}"
         for i, fg in enumerate(imaq_interfaces):
             try:
-                cam = PhotonFocus.PhotonFocusIMAQCamera(
-                    imaq_name=fg, pfcam_port=pfcam_port
-                )
+                cam = PhotonFocus.PhotonFocusIMAQCamera(imaq_name=fg, pfcam_port=pfcam_port)
             except PhotonFocus.PhotonFocusIMAQCamera.Error:
                 continue
             try:
                 if PhotonFocus.check_grabber_association(cam):
-                    cam_name = "ppimaq_{}".format(port)
+                    cam_name = f"ppimaq_{port}"
                     cam_desc["params/imaq_name"] = imaq_interfaces.pop(i)
                     return cam_name, cam_desc
             except PhotonFocus.PhotonFocusIMAQCamera.Error:
@@ -466,9 +442,7 @@ class PhotonFocusIMAQCameraDescriptor(PhotonFocusCameraDescriptor):
         return "PhotonFocus + IMAQ"
 
     def make_thread(self, name):
-        return IMAQPhotonFocusCameraThread(
-            name=name, kwargs=self.settings["params"].as_dict()
-        )
+        return IMAQPhotonFocusCameraThread(name=name, kwargs=self.settings["params"].as_dict())
 
     def make_gui_control(self, parent):
         return PhotonFocusIMAQCameraSettings_GUI(parent, cam_desc=self)
@@ -502,7 +476,7 @@ class PhotonFocusSiSoCameraDescriptor(PhotonFocusCameraDescriptor):
         pfcam_port = (cdesc.manufacturer, cdesc.port)
         name = PhotonFocus.query_camera_name(port)
         cam_desc = cls.build_cam_desc({"pfcam_port": pfcam_port})
-        cam_desc["display_name"] = "{} port {}".format(name, port)
+        cam_desc["display_name"] = f"{name} port {port}"
         for i in range(len(siso_boards)):
             applets = SiliconSoftware.list_applets(i)
             app = None
@@ -529,7 +503,7 @@ class PhotonFocusSiSoCameraDescriptor(PhotonFocusCameraDescriptor):
                     continue
                 try:
                     if PhotonFocus.check_grabber_association(cam):
-                        cam_name = "ppsiso_{}".format(p)
+                        cam_name = f"ppsiso_{p}"
                         cam_desc["params/siso_board"] = i
                         cam_desc["params/siso_applet"] = app
                         cam_desc["params/siso_port"] = p
@@ -579,9 +553,7 @@ class PhotonFocusBitFlowCameraDescriptor(PhotonFocusCameraDescriptor):
             return None
         if len(camfiles) == 1:
             return camfiles[0]
-        pp_camfiles = [
-            f for f in camfiles if re.match(r".*PhotonFocus.*", f, flags=re.IGNORECASE)
-        ]
+        pp_camfiles = [f for f in camfiles if re.match(r".*PhotonFocus.*", f, flags=re.IGNORECASE)]
         if pp_camfiles:
             return sorted(pp_camfiles)[0]
         return sorted(camfiles)[0]
@@ -593,7 +565,7 @@ class PhotonFocusBitFlowCameraDescriptor(PhotonFocusCameraDescriptor):
         pfcam_port = (cdesc.manufacturer, cdesc.port)
         name = PhotonFocus.query_camera_name(port)
         cam_desc = cls.build_cam_desc({"pfcam_port": pfcam_port})
-        cam_desc["display_name"] = "{} port {}".format(name, port)
+        cam_desc["display_name"] = f"{name} port {port}"
         for i, fginfo in enumerate(bitflow_interfaces):
             camfile = cls._find_camfile()
             try:
@@ -606,7 +578,7 @@ class PhotonFocusBitFlowCameraDescriptor(PhotonFocusCameraDescriptor):
                 continue
             try:
                 if PhotonFocus.check_grabber_association(cam):
-                    cam_name = "ppbitflow_{}".format(port)
+                    cam_name = f"ppbitflow_{port}"
                     cam_desc["params/bitflow_idx"] = bitflow_interfaces.pop(i).idx
                     if camfile:
                         cam_desc["params/bitflow_camfile"] = camfile
@@ -620,9 +592,7 @@ class PhotonFocusBitFlowCameraDescriptor(PhotonFocusCameraDescriptor):
         return "PhotonFocus + BitFlow"
 
     def make_thread(self, name):
-        return BitFlowPhotonFocusCameraThread(
-            name=name, kwargs=self.settings["params"].as_dict()
-        )
+        return BitFlowPhotonFocusCameraThread(name=name, kwargs=self.settings["params"].as_dict())
 
     def make_gui_control(self, parent):
         return PhotonFocusBitFlowCameraSettings_GUI(parent, cam_desc=self)

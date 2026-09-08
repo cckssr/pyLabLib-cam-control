@@ -1,7 +1,7 @@
-from pylablib.core.utils import dictionary
-
-import traceback
 import sys
+import traceback
+
+from pylablib.core.utils import dictionary
 
 
 class ICameraDescriptor:
@@ -21,7 +21,7 @@ class ICameraDescriptor:
     @classmethod
     def print_added_camera(cls, name, desc):
         """Print information about a newly detected camera"""
-        print("Adding camera under name {}:".format(name))
+        print(f"Adding camera under name {name}:")
         print("\tkind = '{}'".format(desc["kind"]))
         if "params" in desc:
             print("\tparams = '{}'".format(desc["params"].as_dict()))
@@ -55,9 +55,7 @@ class ICameraDescriptor:
 
     @classmethod
     def build_cam_desc(cls, params, cam_kind=None):
-        return dictionary.Dictionary(
-            {"kind": cam_kind or cls._cam_kind, "params": params or {}}
-        )
+        return dictionary.Dictionary({"kind": cam_kind or cls._cam_kind, "params": params or {}})
 
     @classmethod
     def can_expand(cls, cam_kind):

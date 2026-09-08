@@ -1,11 +1,11 @@
+from pylablib.core.thread import controller
 from pylablib.devices import IMAQ
 from pylablib.devices.AlliedVision import Bonito
 from pylablib.thread.devices.AlliedVision import IMAQBonitoCameraThread
-from pylablib.core.thread import controller
 
-from .base import ICameraDescriptor
 from ..gui import cam_gui_parameters
 from ..gui.base_cam_ctl_gui import GenericCameraSettings_GUI, GenericCameraStatus_GUI
+from .base import ICameraDescriptor
 
 
 class BlackOffsetParameter(cam_gui_parameters.IGUIParameter):
@@ -92,13 +92,9 @@ class BonitoCameraSettings_GUI(GenericCameraSettings_GUI):
         super().setup_settings_tables()
         self.add_builtin_parameter("bl_offset", "advanced")
         self.add_builtin_parameter("status_line", "advanced").allow_diff_update = True
-        self.add_builtin_parameter(
-            "perform_status_check", "advanced"
-        ).allow_diff_update = True
+        self.add_builtin_parameter("perform_status_check", "advanced").allow_diff_update = True
         self.advanced_params.vs["status_line"].connect(
-            controller.exsafe(
-                lambda v: self.advanced_params.set_enabled("perform_status_check", v)
-            )
+            controller.exsafe(lambda v: self.advanced_params.set_enabled("perform_status_check", v))
         )
 
     def collect_parameters(self):
@@ -134,7 +130,7 @@ class BonitoIMAQCameraDescriptor(ICameraDescriptor):
         for name in imaq_cams:
             try:
                 if verbose:
-                    print("Found IMAQ camera {}".format(name))
+                    print(f"Found IMAQ camera {name}")
                 with IMAQ.IMAQCamera(name) as cam:
                     if not Bonito.check_grabber_association(cam):
                         yield None, None
@@ -152,16 +148,14 @@ class BonitoIMAQCameraDescriptor(ICameraDescriptor):
                 device_info = cam.get_device_info()
                 cam_desc = cls.build_cam_desc(params={"imaq_name": imaq_name})
                 cam_desc["display_name"] = device_info.version.splitlines()[0]
-                cam_name = "allvis_bonito_imaq_{}".format(idx)
+                cam_name = f"allvis_bonito_imaq_{idx}"
             return cam_name, cam_desc
 
     def get_kind_name(self):
         return "Bonito + IMAQ"
 
     def make_thread(self, name):
-        return IMAQBonitoCameraThread(
-            name=name, kwargs=self.settings["params"].as_dict()
-        )
+        return IMAQBonitoCameraThread(name=name, kwargs=self.settings["params"].as_dict())
 
     def make_gui_control(self, parent):
         return BonitoCameraSettings_GUI(parent, cam_desc=self)

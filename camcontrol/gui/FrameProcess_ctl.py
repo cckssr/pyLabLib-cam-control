@@ -1,6 +1,5 @@
 from pylablib.core.gui.widgets import container, param_table
 from pylablib.core.thread import controller
-from pylablib.gui.widgets import range_controls
 
 
 class FrameProccess_GUI(container.QGroupBoxContainer):
@@ -50,9 +49,7 @@ class FrameProccess_GUI(container.QGroupBoxContainer):
             label="Combination mode:",
         )
         self.params.add_spacer(0)
-        self.params.add_button(
-            "grab_background", "Grab background", location=("next", 0, 1, 1)
-        )
+        self.params.add_button("grab_background", "Grab background", location=("next", 0, 1, 1))
         self.params.add_text_label("background_state", location=(-1, 1, 1, "end"))
         with self.params.using_new_sublayout("background_saving_row", "hbox"):
             self.params.add_combo_box(
@@ -72,9 +69,7 @@ class FrameProccess_GUI(container.QGroupBoxContainer):
             enabled = self.v["enabled"]
             method = self.v["method"]
             if method == "snapshot":
-                self.image_processor.csi.setup_snapshot_saving(
-                    self.v["background_saving"]
-                )
+                self.image_processor.csi.setup_snapshot_saving(self.v["background_saving"])
                 self.image_processor.csi.setup_snapshot_subtraction(
                     self.v["comb_count"], self.v["comb_mode"], self.v["comb_step"]
                 )
@@ -82,9 +77,7 @@ class FrameProccess_GUI(container.QGroupBoxContainer):
                 self.image_processor.csi.setup_running_subtraction(
                     self.v["comb_count"], self.v["comb_mode"], self.v["comb_step"]
                 )
-            self.image_processor.csi.setup_subtraction_method(
-                method=method, enabled=enabled
-            )
+            self.image_processor.csi.setup_subtraction_method(method=method, enabled=enabled)
             self.recv_parameters()
 
         for w in [
@@ -119,12 +112,8 @@ class FrameProccess_GUI(container.QGroupBoxContainer):
             self.setEnabled(True)
             method = self.v["method"]
             is_snapshot = method == "snapshot"
-            self.params.set_enabled(
-                ["grab_background", "background_state"], is_snapshot
-            )
-            self.params.set_enabled(
-                ["background_saving"], is_snapshot and self.v["enabled"]
-            )
+            self.params.set_enabled(["grab_background", "background_state"], is_snapshot)
+            self.params.set_enabled(["background_saving"], is_snapshot and self.v["enabled"])
             self.i["comb_count"] = "{} / {}".format(
                 self.image_processor.v[method, "grabbed"],
                 self.image_processor.v[method, "parameters/count"],
@@ -140,13 +129,9 @@ class FrameProccess_GUI(container.QGroupBoxContainer):
             if self.image_processor.v["enabled"]:
                 method = self.image_processor.v["method"]
                 if method == "snapshot":
-                    enabled = (
-                        self.image_processor.v["snapshot/background/state"] == "valid"
-                    )
+                    enabled = self.image_processor.v["snapshot/background/state"] == "valid"
                 elif method == "running":
-                    enabled = (
-                        self.image_processor.v["running/background/frame"] is not None
-                    )
+                    enabled = self.image_processor.v["running/background/frame"] is not None
             self.ctl.call_thread_method(
                 "update_activity_status",
                 "processing",

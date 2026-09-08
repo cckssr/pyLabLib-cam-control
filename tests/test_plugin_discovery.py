@@ -65,8 +65,6 @@ def test_external_filter_directory_is_scanned(tmp_path):
 
 
 def test_extra_dir_equal_to_builtin_dir_does_not_duplicate():
-    builtin_dir = os.path.dirname(
-        __import__("camcontrol.plugins.base", fromlist=["x"]).__file__
-    )
+    builtin_dir = os.path.dirname(__import__("camcontrol.plugins.base", fromlist=["x"]).__file__)
     names = [p.get_class_name() for p in find_plugins(extra_dir=builtin_dir)]
     assert len(names) == len(set(names))

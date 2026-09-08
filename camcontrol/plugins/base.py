@@ -1,14 +1,14 @@
-from pylablib.core.thread import controller, synchronizing
-from pylablib.core.utils import files as file_utils, string as string_utils
-from pylablib.core.gui.widgets import container
-from pylablib.core.gui import QtWidgets, utils
-from pylablib import widgets
-
+import collections
 import importlib
 import os
 import sys
-import collections
 
+from pylablib import widgets
+from pylablib.core.gui import QtWidgets, utils
+from pylablib.core.gui.widgets import container
+from pylablib.core.thread import controller, synchronizing
+from pylablib.core.utils import files as file_utils
+from pylablib.core.utils import string as string_utils
 
 _plugin_init_order = ["plugin_create", "plugin_preinit", "plugin_setup", "plugin_start"]
 
@@ -28,9 +28,7 @@ class PluginThreadController(controller.QTaskThread):
     """
 
     def __init__(self, name=None, args=None, kwargs=None, multicast_pool=None):
-        super().__init__(
-            name=name, args=args, kwargs=kwargs, multicast_pool=multicast_pool
-        )
+        super().__init__(name=name, args=args, kwargs=kwargs, multicast_pool=multicast_pool)
         self.plugin = None
         self.main_frame = None
         self.barriers = kwargs.pop("barriers", {})
@@ -47,9 +45,7 @@ class PluginThreadController(controller.QTaskThread):
         self.plugin.preinit()
         self._next_init_step("plugin_setup")
         self.plugin._sync_camctl()
-        gui_ctl = self._make_manager(
-            self.main_frame, "{}.{}".format(self.plugin.get_class_name(), name)
-        )
+        gui_ctl = self._make_manager(self.main_frame, f"{self.plugin.get_class_name()}.{name}")
         self.plugin._set_gui(gui_ctl)
         self.plugin._open()
         self._next_init_step("plugin_start")
@@ -67,13 +63,9 @@ class PluginThreadController(controller.QTaskThread):
             and barrier != _plugin_init_order[self._passed_barriers]
         ):
             raise ValueError(
-                "expected to unlock next barrier {}; got {} instead".format(
-                    _plugin_init_order[self._passed_barriers], barrier
-                )
+                f"expected to unlock next barrier {_plugin_init_order[self._passed_barriers]}; got {barrier} instead"
             )
-        if self._passed_barriers > 0 and self._passed_barriers <= len(
-            _plugin_init_order
-        ):
+        if self._passed_barriers > 0 and self._passed_barriers <= len(_plugin_init_order):
             self.notify_exec_point(_plugin_init_order[self._passed_barriers - 1])
         if self._passed_barriers < len(_plugin_init_order):
             self._wait_barrier(_plugin_init_order[self._passed_barriers])
@@ -210,7 +202,7 @@ class PluginGUIManager(container.QContainer):
         elif kind == "empty":
             widget = None
         else:
-            raise ValueError("unrecognized tab kind: {}".format(kind))
+            raise ValueError(f"unrecognized tab kind: {kind}")
         name = self._normalize_name(name)
         tab = dst.add_tab(
             self.name_prefix + name,
@@ -248,7 +240,7 @@ class PluginGUIManager(container.QContainer):
         elif kind == "empty":
             widget = None
         else:
-            raise ValueError("unrecognized tab kind: {}".format(kind))
+            raise ValueError(f"unrecognized tab kind: {kind}")
         name = self._normalize_name(name)
         if dst.get_sublayout_kind() == "grid":
             if index is None:
@@ -404,7 +396,7 @@ class IPlugin:
 
     def __init__(self, name, ctl, parameters=None, ext_controller_names=None):
         self.name = name
-        self.full_name = "{}.{}".format(self.get_class_name(), self.name)
+        self.full_name = f"{self.get_class_name()}.{self.name}"
         self.ctl = ctl
         self.ca = self.ctl.ca
         self.cs = self.ctl.cs
@@ -487,16 +479,12 @@ class IPlugin:
 
     def _sync_extctls(self):
         self.extctls = {
-            a: controller.sync_controller(n)
-            for a, n in self.extctl_names.items()
-            if a != "camera"
+            a: controller.sync_controller(n) for a, n in self.extctl_names.items() if a != "camera"
         }
 
     def _sync_camctl(self):
         if "camera" in self.extctl_names:
-            self.extctls["camera"] = controller.sync_controller(
-                self.extctl_names["camera"]
-            )
+            self.extctls["camera"] = controller.sync_controller(self.extctl_names["camera"])
 
     def _open(self):
         self._opened = True
@@ -586,9 +574,7 @@ class PluginManager:
     def __init__(self, settings, ext_controller_names=None):
         self.settings = settings
         extra_dir = os.path.join(settings.get("runtime/root_folder", default=""), "plugins")
-        self.plugin_classes = {
-            p.get_class_name(): p for p in find_plugins(extra_dir=extra_dir)
-        }
+        self.plugin_classes = {p.get_class_name(): p for p in find_plugins(extra_dir=extra_dir)}
         self._running_plugins = {}
         self._ext_controller_names = ext_controller_names
 
@@ -716,7 +702,7 @@ def _load_modules(directory, namespace):
         if f == "__init__.py":
             continue
         rel = os.path.splitext(f)[0].replace("\\", ".").replace("/", ".")
-        module_name = "{}.{}".format(namespace, rel)
+        module_name = f"{namespace}.{rel}"
         module_names.append(module_name)
         if module_name in sys.modules:
             continue
@@ -725,7 +711,7 @@ def _load_modules(directory, namespace):
         try:
             spec.loader.exec_module(mod)
         except Exception as e:
-            print("Could not load module {}: {}".format(module_name, e), file=sys.stderr)
+            print(f"Could not load module {module_name}: {e}", file=sys.stderr)
             module_names.remove(module_name)
             continue
         sys.modules[module_name] = mod

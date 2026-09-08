@@ -20,7 +20,7 @@ class ProcessingIndicator_GUI(param_table.ParamTable):
         self.items = items
         for name, (caption, _) in items:
             with self.using_new_sublayout(name, "hbox"):
-                self.add_text_label(name, label="{}:  ".format(caption))
+                self.add_text_label(name, label=f"{caption}:  ")
                 self.add_padding()
         if update:
             self.update_indicators()
@@ -45,15 +45,9 @@ def binning_item(preprocessor):
         params = ctl.v["params"]
         if ctl.v["enabled"]:
             spat_bin = (
-                "{}x{} spatial".format(*params["spat/bin"])
-                if params["spat/bin"] != (1, 1)
-                else ""
+                "{}x{} spatial".format(*params["spat/bin"]) if params["spat/bin"] != (1, 1) else ""
             )
-            temp_bin = (
-                "{} temporal".format(params["time/bin"])
-                if params["time/bin"] != 1
-                else ""
-            )
+            temp_bin = "{} temporal".format(params["time/bin"]) if params["time/bin"] != 1 else ""
             if spat_bin or temp_bin:
                 return ", ".join([i for i in [spat_bin, temp_bin] if i])
         return None

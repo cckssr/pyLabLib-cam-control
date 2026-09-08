@@ -1,9 +1,9 @@
 from pylablib.devices import uc480
 from pylablib.thread.devices.uc480 import UC480CameraThread
 
-from .base import ICameraDescriptor
-from ..gui.base_cam_ctl_gui import GenericCameraSettings_GUI, GenericCameraStatus_GUI
 from ..gui import cam_gui_parameters
+from ..gui.base_cam_ctl_gui import GenericCameraSettings_GUI, GenericCameraStatus_GUI
+from .base import ICameraDescriptor
 
 
 class PixelRateFloatGUIParameter(cam_gui_parameters.FloatGUIParameter):
@@ -29,9 +29,7 @@ class PixelRateFloatGUIParameter(cam_gui_parameters.FloatGUIParameter):
         super().setup(parameters, full_info)
         if self.cam_range_name is not None and self.cam_range_name in full_info:
             rmin, rmax = full_info[self.cam_range_name][:2]
-            self.base.w[self.gui_name].set_limiter(
-                (rmin * self.factor, rmax * self.factor)
-            )
+            self.base.w[self.gui_name].set_limiter((rmin * self.factor, rmax * self.factor))
 
 
 class GainFloatGUIParameter(cam_gui_parameters.FloatGUIParameter):
@@ -97,15 +95,13 @@ class UC480CameraDescriptor(ICameraDescriptor):
     @classmethod
     def _iterate_backend(cls, backend, verbose=False):
         if verbose:
-            print("Searching for {} cameras".format(cls._backend_names[backend]))
+            print(f"Searching for {cls._backend_names[backend]} cameras")
         try:
             cam_infos = uc480.list_cameras(backend=backend)
         except (uc480.uc480Error, OSError):
             if verbose:
                 print(
-                    "Error loading or running {} library: required software ({}) must be missing\n".format(
-                        backend, cls._backend_software[backend]
-                    )
+                    f"Error loading or running {backend} library: required software ({cls._backend_software[backend]}) must be missing\n"
                 )
             if verbose == "full":
                 cls.print_error()
@@ -113,23 +109,15 @@ class UC480CameraDescriptor(ICameraDescriptor):
         cam_num = len(cam_infos)
         if not cam_num:
             if verbose:
-                print("Found no {} cameras\n".format(backend))
+                print(f"Found no {backend} cameras\n")
             return
         if verbose:
-            print(
-                "Found {} {} camera{}".format(
-                    cam_num, backend, "s" if cam_num > 1 else ""
-                )
-            )
+            print("Found {} {} camera{}".format(cam_num, backend, "s" if cam_num > 1 else ""))
         for ci in cam_infos:
             if verbose:
-                print(
-                    "Found {} camera dev_idx={}, cam_idx={}".format(
-                        backend, ci.dev_id, ci.cam_id
-                    )
-                )
+                print(f"Found {backend} camera dev_idx={ci.dev_id}, cam_idx={ci.cam_id}")
             if verbose:
-                print("\tModel {}, serial {}".format(ci.model, ci.serial_number))
+                print(f"\tModel {ci.model}, serial {ci.serial_number}")
             yield None, (backend, ci)
 
     @classmethod
@@ -149,8 +137,8 @@ class UC480CameraDescriptor(ICameraDescriptor):
                 "backend": backend,
             }
         )
-        cam_desc["display_name"] = "{} {}".format(ci.model, ci.serial_number)
-        cam_name = "{}_{}".format(backend, idx)
+        cam_desc["display_name"] = f"{ci.model} {ci.serial_number}"
+        cam_name = f"{backend}_{idx}"
         return cam_name, cam_desc
 
     def get_kind_name(self):

@@ -23,19 +23,22 @@ if sys.platform == "win32":
         pywin32_folder + os.pathsep + os.environ.get("PATH", "")
     )  # fix pywin32 confusion with some Anaconda installations
 
-from pylablib.core.thread import controller, synchronizing, threadprop
-from pylablib.core.gui.widgets import container, param_table
+import pylablib
+import pyqtgraph
+from pylablib import widgets as pll_widgets
 from pylablib.core.fileio import loadfile, savefile
+from pylablib.core.gui import QtCore, QtGui, QtWidgets, Signal, qtkwargs
+from pylablib.core.gui.widgets import container, param_table
+from pylablib.core.thread import controller, threadprop
 from pylablib.core.utils import (
     dictionary,
-    general as general_utils,
+)
+from pylablib.core.utils import (
     files as file_utils,
 )
-from pylablib import widgets as pll_widgets
-import pylablib
-
-from pylablib.core.gui import QtWidgets, QtCore, QtGui, Signal, qtkwargs
-import pyqtgraph
+from pylablib.core.utils import (
+    general as general_utils,
+)
 
 # OpenGL context creation can fail in headless/VM/remote-desktop environments; allow
 # disabling it without a code change (e.g. `CAMCONTROL_USE_OPENGL=0`).
@@ -49,8 +52,8 @@ except KeyError:
 
 import argparse
 import datetime
-import threading
 import subprocess
+import threading
 import traceback
 
 try:
@@ -61,26 +64,25 @@ except ImportError:
     win32com_present = False
 
 
+from camcontrol import plugins, services, splash
+from camcontrol.cameras.loader import camera_descriptors
 from camcontrol.gui import (
-    camera_control,
-    SaveBox_ctl,
-    ProcessingIndicator_ctl,
     ActivityIndicator_ctl,
-)
-from camcontrol.gui import (
     DisplaySettings_ctl,
     FramePreprocess_ctl,
     FrameProcess_ctl,
     PlotControl_ctl,
+    ProcessingIndicator_ctl,
+    SaveBox_ctl,
+    about,
+    camera_control,
+    color_theme,
+    error_message,
+    settings_editor,
+    tutorial,
 )
-from camcontrol.gui import tutorial, color_theme, settings_editor, about, error_message
-from camcontrol import services
-from camcontrol.services import dev as dev_services
-from camcontrol.cameras.loader import camera_descriptors
-from camcontrol import plugins
-from camcontrol import splash
 from camcontrol.resources import resource_path
-
+from camcontrol.services import dev as dev_services
 
 ### Redirecting console / errors to file logs ###
 log_lock = threading.RLock()
@@ -94,15 +96,9 @@ class StreamLogger(general_utils.StreamFileLogger):
     def write_header(self, f):
         f.write("\n\n" + "-" * 50)
         f.write(
-            "\nStarting {} {:on %Y/%m/%d at %H:%M:%S}\n\n".format(
-                os.path.split(sys.argv[0])[1], self.start_time
-            )
+            f"\nStarting {os.path.split(sys.argv[0])[1]} {self.start_time:on %Y/%m/%d at %H:%M:%S}\n\n"
         )
-        f.write(
-            "\nFirst message {:on %Y/%m/%d at %H:%M:%S}\n\n".format(
-                datetime.datetime.now()
-            )
-        )
+        f.write(f"\nFirst message {datetime.datetime.now():on %Y/%m/%d at %H:%M:%S}\n\n")
 
 
 def configure_logging():
@@ -111,7 +107,7 @@ def configure_logging():
     sys.stdout = StreamLogger("logout.txt", sys.stdout)
 
 
-from camcontrol import version, compare_version
+from camcontrol import compare_version, version
 
 _defaults_filename = "defaults.cfg"
 _locals_filename = "locals.cfg"
@@ -160,10 +156,8 @@ class StandaloneFrame(container.QWidgetContainer):
         self.compact_interface = settings.get("interface/compact", False)
 
         ### Setup GUI
-        cam_display_name = settings["cameras", self.cam_name].get(
-            "display_name", self.cam_name
-        )
-        self.setWindowTitle("{} control".format(cam_display_name))
+        cam_display_name = settings["cameras", self.cam_name].get("display_name", self.cam_name)
+        self.setWindowTitle(f"{cam_display_name} control")
         self.setWindowIcon(QtGui.QIcon(resource_path("icon.ico")))
         self.cam_ctl = camera_control.GenericCameraCtl(
             cam_thread=cam_thread,
@@ -185,9 +179,7 @@ class StandaloneFrame(container.QWidgetContainer):
             self.trace_plotter = self.add_to_layout(pyqtgraph.PlotWidget(self))
             self.trace_plotter.setMinimumSize(400, 200)
             self.set_row_stretch(0, 1)
-            image_tab = self.plots_tabs.add_tab(
-                "standard_frame", "Standard", layout="vbox"
-            )
+            image_tab = self.plots_tabs.add_tab("standard_frame", "Standard", layout="vbox")
             self.image_proc_indicator = image_tab.add_child(
                 "processing_indicator",
                 ProcessingIndicator_ctl.ProcessingIndicator_GUI(self),
@@ -205,29 +197,17 @@ class StandaloneFrame(container.QWidgetContainer):
                     ),
                 ]
             )
-            self.cam_ctl.image_updated.connect(
-                self.image_proc_indicator.update_indicators
-            )
-            self.image_plotter = image_tab.add_to_layout(
-                pll_widgets.ImagePlotterCombined(self)
-            )
+            self.cam_ctl.image_updated.connect(self.image_proc_indicator.update_indicators)
+            self.image_plotter = image_tab.add_to_layout(pll_widgets.ImagePlotterCombined(self))
             self.image_plotter.setup(
                 name="image_plotter", min_size=(400, 400), ctl_caption="Image settings"
             )
-            self.cam_ctl.add_child(
-                "plotter_area", self.image_plotter.plt, gui_values_path=False
-            )
-            self.cam_ctl.add_child(
-                "plotter_ctl", self.image_plotter.ctl, gui_values_path="img"
-            )
+            self.cam_ctl.add_child("plotter_area", self.image_plotter.plt, gui_values_path=False)
+            self.cam_ctl.add_child("plotter_ctl", self.image_plotter.ctl, gui_values_path="img")
             self.image_plotter.ctl.set_img_lim(-65536, 65536)
             with self.image_plotter.using_layout("sidebar"):
-                self.display_settings_table = DisplaySettings_ctl.DisplaySettings_GUI(
-                    self
-                )
-                self.image_plotter.add_to_layout(
-                    self.display_settings_table, location=-1
-                )
+                self.display_settings_table = DisplaySettings_ctl.DisplaySettings_GUI(self)
+                self.image_plotter.add_to_layout(self.display_settings_table, location=-1)
                 self.add_child(
                     "display_settings_table",
                     self.display_settings_table,
@@ -235,9 +215,7 @@ class StandaloneFrame(container.QWidgetContainer):
                     location="skip",
                 )
                 self.display_settings_table.setup(slowdown_thread=slowdown_thread)
-                self.cam_ctl.image_updated.connect(
-                    self.display_settings_table.on_new_frame
-                )
+                self.cam_ctl.image_updated.connect(self.display_settings_table.on_new_frame)
             self.image_plotter.plt.set_colormap("gray_sat")
         # Setup status and saving
         if not self.compact_interface:
@@ -249,9 +227,7 @@ class StandaloneFrame(container.QWidgetContainer):
                 self.add_padding()
         # Setup control tab widget
         with self.using_new_sublayout("control_tabs_box", "vbox"):
-            self.control_tabs = self.add_child(
-                "control_tabs", container.QTabContainer(self)
-            )
+            self.control_tabs = self.add_child("control_tabs", container.QTabContainer(self))
             self.control_tabs.setFixedWidth(300)
             self.control_tabs.setup()
             self._add_param_loading(self)
@@ -261,9 +237,7 @@ class StandaloneFrame(container.QWidgetContainer):
             "cam_settings_box", caption="Camera settings", no_margins=False
         ).add_to_layout(self.cam_settings_table)
         self.cam_settings_table.setup(self.cam_ctl)
-        self.cam_ctl.add_child(
-            "settings", self.cam_settings_table, gui_values_path="cam"
-        )
+        self.cam_ctl.add_child("settings", self.cam_settings_table, gui_values_path="cam")
         if self.compact_interface:
             cam_tab.add_spacer(20)
             self._add_camstatus(cam_tab)
@@ -334,9 +308,7 @@ class StandaloneFrame(container.QWidgetContainer):
         self.add_property_element(
             "defaults/window/position",
             lambda: (self.geometry().x(), self.geometry().y()),
-            lambda v: self.setGeometry(
-                v[0], v[1], self.size().width(), self.size().height()
-            ),
+            lambda v: self.setGeometry(v[0], v[1], self.size().width(), self.size().height()),
             add_indicator=False,
         )
         self._maximized = False
@@ -352,9 +324,7 @@ class StandaloneFrame(container.QWidgetContainer):
             set_maximized,
             add_indicator=False,
         )
-        self.add_virtual_element(
-            "defaults/settings_folder", value="", add_indicator=False
-        )
+        self.add_virtual_element("defaults/settings_folder", value="", add_indicator=False)
         self.tutorial_box = None
         self.settings_editor = None
         self.about_window = None
@@ -373,9 +343,7 @@ class StandaloneFrame(container.QWidgetContainer):
         settings_ctl = controller.sync_controller(settings_manager_thread)
         settings_ctl.ca.add_source(
             "gui",
-            controller.call_in_gui_thread(
-                lambda: self.get_all_values(full_status=True)
-            ),
+            controller.call_in_gui_thread(lambda: self.get_all_values(full_status=True)),
         )
         settings_ctl.ca.update_settings("cfg", settings.copy())
         # Setup event hooks manager
@@ -397,33 +365,21 @@ class StandaloneFrame(container.QWidgetContainer):
     def _add_savebox(self, parent):
         self.saving_settings_table = parent.add_to_layout(SaveBox_ctl.SaveBox_GUI(self))
         self.saving_settings_table.setup(self.cam_ctl)
-        self.cam_ctl.add_child(
-            "savebox", self.saving_settings_table, gui_values_path="save"
-        )
+        self.cam_ctl.add_child("savebox", self.saving_settings_table, gui_values_path="save")
 
     def _add_camstatus(self, parent):
-        self.cam_status_table = parent.add_to_layout(
-            self.cam_desc.make_gui_status(self)
-        )
+        self.cam_status_table = parent.add_to_layout(self.cam_desc.make_gui_status(self))
         self.cam_status_table.setup(self.cam_ctl)
-        self.cam_ctl.add_child(
-            "camstat", self.cam_status_table, gui_values_path="camstat"
-        )
+        self.cam_ctl.add_child("camstat", self.cam_status_table, gui_values_path="camstat")
 
     def _add_savestatus(self, parent):
         self.save_status_table = parent.add_to_layout(SaveBox_ctl.SaveStatus_GUI(self))
         self.save_status_table.setup(self.cam_ctl)
-        self.cam_ctl.add_child(
-            "savestat", self.save_status_table, gui_values_path="savestat"
-        )
+        self.cam_ctl.add_child("savestat", self.save_status_table, gui_values_path="savestat")
 
     def _add_param_loading(self, parent):
-        self.params_loading_settings = parent.add_to_layout(
-            param_table.ParamTable(self)
-        )
-        self.add_child(
-            "params_loading_settings", self.params_loading_settings, location="skip"
-        )
+        self.params_loading_settings = parent.add_to_layout(param_table.ParamTable(self))
+        self.add_child("params_loading_settings", self.params_loading_settings, location="skip")
         self.params_loading_settings.setup(add_indicator=False)
         with self.params_loading_settings.using_new_sublayout("buttons", "hbox"):
             self.params_loading_settings.add_button("load_settings", "Load settings...")
@@ -445,12 +401,8 @@ class StandaloneFrame(container.QWidgetContainer):
             self.params_loading_settings.w["extras"].setIcon(
                 QtGui.QIcon(QtGui.QPixmap(resource_path("cog.png")))
             )
-        self.params_loading_settings.vs["load_settings"].connect(
-            self.on_load_settings_button
-        )
-        self.params_loading_settings.vs["save_settings"].connect(
-            self.on_save_settings_button
-        )
+        self.params_loading_settings.vs["load_settings"].connect(self.on_load_settings_button)
+        self.params_loading_settings.vs["save_settings"].connect(self.on_save_settings_button)
         self.params_loading_settings.vs["extras"].connect(self.call_extra)
 
     closed = Signal()
@@ -483,9 +435,7 @@ class StandaloneFrame(container.QWidgetContainer):
         )
         if path:
             self.v["defaults/settings_folder"] = os.path.split(path)[0]
-            self.load_settings(
-                path, scope=self.v["settings_load_scope"], cam_apply=True
-            )
+            self.load_settings(path, scope=self.v["settings_load_scope"], cam_apply=True)
 
     @controller.exsafeSlot()
     def on_save_settings_button(self):
@@ -537,7 +487,7 @@ class StandaloneFrame(container.QWidgetContainer):
             shortcut = shell.CreateShortcut(path)
             shortcut.TargetPath = os.path.abspath(os.path.join("..", "control.exe"))
             shortcut.WorkingDirectory = os.path.abspath(os.path.join(".."))
-            shortcut.Arguments = '-c "{}"'.format(self.cam_name)
+            shortcut.Arguments = f'-c "{self.cam_name}"'
             shortcut.IconLocation = resource_path("icon.ico")
             shortcut.Save()
 
@@ -565,9 +515,7 @@ class StandaloneFrame(container.QWidgetContainer):
                 self.about_window.showNormal()
 
     @controller.call_in_gui_thread
-    def load_plugin(
-        self, plugin_class, name="__default__", parameters=None, start_order=0
-    ):
+    def load_plugin(self, plugin_class, name="__default__", parameters=None, start_order=0):
         """
         Start plugin thread.
 
@@ -657,9 +605,7 @@ class StandaloneFrame(container.QWidgetContainer):
         super().set_all_values(values)
         self.image_proc_indicator.update_indicators()
 
-    def load_settings(
-        self, path=None, warn_if_missing=True, scope="all", cam_apply=False
-    ):
+    def load_settings(self, path=None, warn_if_missing=True, scope="all", cam_apply=False):
         if path is None:
             path = _defaults_filename
         if os.path.exists(path):
@@ -670,24 +616,20 @@ class StandaloneFrame(container.QWidgetContainer):
                 if ver is None:
                     warn_msg = "settings file does not contain the software version"
                 elif compare_version(ver) == "?":
-                    warn_msg = "unrecognized version {}".format(ver)
+                    warn_msg = f"unrecognized version {ver}"
                 elif compare_version(ver) == ">":
-                    warn_msg = "settings file version ({}) is higher than the current version ({})".format(
-                        ver, version
-                    )
+                    warn_msg = f"settings file version ({ver}) is higher than the current version ({version})"
                 elif cam is None:
                     warn_msg = "settings file does not contain the camera name"
                 elif cam != self.cam_name:
-                    warn_msg = "settings file camera ({}) is different from the current camera ({})".format(
-                        cam, self.cam_name
-                    )
+                    warn_msg = f"settings file camera ({cam}) is different from the current camera ({self.cam_name})"
                 else:
                     warn_msg = None
                 if warn_msg is not None and warn_if_missing:
                     result = QtWidgets.QMessageBox.warning(
                         self,
                         "Incompatible settings format",
-                        "Warning: {}; load anyway?".format(warn_msg),
+                        f"Warning: {warn_msg}; load anyway?",
                         QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
                     )
                     if result == QtWidgets.QMessageBox.No:
@@ -707,18 +649,12 @@ class StandaloneFrame(container.QWidgetContainer):
             if scope == "gui" and "cam/cam" in settings:
                 del settings["cam/cam"]
             if scope == "camera":
-                settings = dictionary.Dictionary(
-                    {"cam/cam": settings.get("cam/cam", {})}
-                )
-            self.event_hooks_ctl.cs.call_hook(
-                "gui/settings/set/pre_set", settings=settings
-            )
+                settings = dictionary.Dictionary({"cam/cam": settings.get("cam/cam", {})})
+            self.event_hooks_ctl.cs.call_hook("gui/settings/set/pre_set", settings=settings)
             self.set_all_values(settings)
             if cam_apply and scope in {"all", "camera"}:
                 self.cam_ctl.send_parameters()
-            self.event_hooks_ctl.cs.call_hook(
-                "gui/settings/set/post_set", settings=settings
-            )
+            self.event_hooks_ctl.cs.call_hook("gui/settings/set/post_set", settings=settings)
             return True
         return False
 
@@ -744,22 +680,16 @@ class StandaloneFrame(container.QWidgetContainer):
             del settings[self.cam_name]
         self.event_hooks_ctl.cs.call_hook("gui/settings/get/pre_get")
         save_settings = self.get_all_values()
-        self.event_hooks_ctl.cs.call_hook(
-            "gui/settings/get/post_get", settings=save_settings
-        )
+        self.event_hooks_ctl.cs.call_hook("gui/settings/get/post_get", settings=save_settings)
         settings[self.cam_name] = save_settings
         savefile.save_dict(settings, path)
-        self.event_hooks_ctl.cs.call_hook(
-            "gui/settings/get/post_save", settings=settings
-        )
+        self.event_hooks_ctl.cs.call_hook("gui/settings/get/post_save", settings=settings)
 
     @controller.exsafeSlot()
     def start(self):
         self.plugin_manager.sync_plugins()
         self.cam_ctl.sync_controller()
-        self.load_settings(
-            path=self.settings.get("interface/defaults_path"), warn_if_missing=False
-        )
+        self.load_settings(path=self.settings.get("interface/defaults_path"), warn_if_missing=False)
         self.cam_ctl.dev.cs.apply_parameters({})  # sync with the camera
         super().start()
         self.plugin_manager.unlock_barrier("plugin_start")
@@ -798,12 +728,8 @@ class CamSelectFrame(param_table.ParamTable):
         )
         self.button_box.setCenterButtons(True)
         self.add_to_layout(self.button_box, location=("next", 0, 1, "end"))
-        self.button_box.accepted.connect(
-            controller.exsafe(lambda: self.on_select(True))
-        )
-        self.button_box.rejected.connect(
-            controller.exsafe(lambda: self.on_select(False))
-        )
+        self.button_box.accepted.connect(controller.exsafe(lambda: self.on_select(True)))
+        self.button_box.rejected.connect(controller.exsafe(lambda: self.on_select(False)))
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -849,16 +775,14 @@ class MissingSettingsFrame(param_table.ParamTable):
         cmp = compare_version(ver)
         errmsg = None
         if cmp == "?":
-            errmsg = "unrecognized version in the settings file: {}".format(ver)
+            errmsg = f"unrecognized version in the settings file: {ver}"
         elif cmp == ">":
-            errmsg = "settings version {} is newer than the current version {}; some settings may not transfer correctly".format(
-                ver, version
-            )
+            errmsg = f"settings version {ver} is newer than the current version {version}; some settings may not transfer correctly"
         if errmsg is not None:
             QtWidgets.QMessageBox.warning(
                 self,
                 "Potential settings incompatibility",
-                "Warning: {}".format(errmsg),
+                f"Warning: {errmsg}",
                 QtWidgets.QMessageBox.Ok,
             )
         file_utils.retry_copy(src, dst)
@@ -939,9 +863,7 @@ class ErrorBoxDisplay:
         """Show error message dialog box"""
         etype, exc, _ = sys.exc_info()
         if etype is not None:
-            self.error_msg = "  ".join(
-                traceback.format_exception_only(etype, exc)
-            ).strip()
+            self.error_msg = "  ".join(traceback.format_exception_only(etype, exc)).strip()
 
 
 error_display = ErrorBoxDisplay()
@@ -952,9 +874,7 @@ def _parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="Pylablib cam-control software for controlling all connected cameras"
     )
-    parser.add_argument(
-        "--camera", "-c", help="controlled camera name", metavar="CAM_NAME"
-    )
+    parser.add_argument("--camera", "-c", help="controlled camera name", metavar="CAM_NAME")
     parser.add_argument(
         "--config-file",
         "-cf",
@@ -962,9 +882,7 @@ def _parse_args(argv=None):
         metavar="FILE",
         default="settings.cfg",
     )
-    parser.add_argument(
-        "--subconfig", "-sc", help="subconfiguration name", metavar="SC_NAME"
-    )
+    parser.add_argument("--subconfig", "-sc", help="subconfiguration name", metavar="SC_NAME")
     return parser.parse_args(argv)
 
 
@@ -1023,9 +941,7 @@ def start_threads(settings, cam_desc):
     services.EventHooksManager(event_hooks_manager_thread).start()
     services.ResourceManager(resource_manager_thread).start()
     allow_garbage_collection = control_settings.get("gc/enabled", True)
-    garbage_collection_periods = control_settings.get(
-        "gc/periods", {"default": 10, "saving": 60}
-    )
+    garbage_collection_periods = control_settings.get("gc/periods", {"default": 10, "saving": 60})
     services.GarbageCollector(
         garbage_collector_thread,
         kwargs={
@@ -1070,9 +986,7 @@ def start_app(ask_on_no_cam=True):
             QtWidgets.QMessageBox.Ok,
         )
         controller.stop_app(code=1)
-    app.setStyleSheet(
-        color_theme.load_style(settings.get("interface/color_theme", "dark"))
-    )
+    app.setStyleSheet(color_theme.load_style(settings.get("interface/color_theme", "dark")))
     select_cameras = [argvp.camera, settings.pop("select_camera", None)]
     if len(cams) == 1:
         select_cameras.append(list(cams)[0])
@@ -1088,20 +1002,16 @@ def start_app(ask_on_no_cam=True):
         splash.update_splash_screen(msg="Connecting to the camera...")
         cam_name = settings.get("select_camera")
         if cam_name is None or cam_name not in settings["cameras"]:
-            raise ValueError("unavailable camera {}".format(cam_name))
+            raise ValueError(f"unavailable camera {cam_name}")
         if ("css", cam_name) in settings:
             settings.update(settings["css", cam_name])
         if argvp.subconfig is not None and ("scs", argvp.subconfig) in settings:
             settings.update(settings["scs", argvp.subconfig])
-        app.setStyleSheet(
-            color_theme.load_style(settings.get("interface/color_theme", "dark"))
-        )
+        app.setStyleSheet(color_theme.load_style(settings.get("interface/color_theme", "dark")))
 
         cam_desc_class = camera_descriptors[settings["cameras", cam_name, "kind"]]
         cam_desc = cam_desc_class(cam_name, settings=settings["cameras", cam_name])
-        plugin_manager = plugins.PluginManager(
-            settings, ext_controller_names=_ext_controller_names
-        )
+        plugin_manager = plugins.PluginManager(settings, ext_controller_names=_ext_controller_names)
         plugin_manager.build_plugins()
         plugin_manager.sync_plugins()
         start_threads(settings, cam_desc)
@@ -1117,9 +1027,7 @@ def start_app(ask_on_no_cam=True):
         settings_ctl = controller.sync_controller(settings_manager_thread)
         settings_ctl.ca.update_settings("software/version", version)
         settings_ctl.ca.add_source("cam", cam_ctl.cad.get_full_info, async_result=True)
-        settings_ctl.ca.add_source(
-            "cam/settings", cam_ctl.cad.get_settings, async_result=True
-        )
+        settings_ctl.ca.add_source("cam/settings", cam_ctl.cad.get_settings, async_result=True)
 
         def get_cam_counters():
             counters = cam_ctl.v["frames"]
@@ -1158,9 +1066,7 @@ def execute(app=None):
         app = prepare_app()
     gui = controller.get_gui_controller()
     if not console:
-        controller.add_exception_hook(
-            "error_message", error_display.on_error, single_call=True
-        )
+        controller.add_exception_hook("error_message", error_display.on_error, single_call=True)
     gui.started.connect(start_app)
     app.exec_()
     error_display.check_for_error()

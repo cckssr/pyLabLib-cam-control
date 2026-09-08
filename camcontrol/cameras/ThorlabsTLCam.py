@@ -1,9 +1,9 @@
 from pylablib.devices import Thorlabs
 from pylablib.thread.devices.Thorlabs import ThorlabsTLCameraThread
 
-from .base import ICameraDescriptor
 from ..gui import cam_gui_parameters
 from ..gui.base_cam_ctl_gui import GenericCameraSettings_GUI, GenericCameraStatus_GUI
+from .base import ICameraDescriptor
 
 
 class GainParameter(cam_gui_parameters.FloatGUIParameter):
@@ -60,15 +60,11 @@ class ThorlabsTLCamCameraDescriptor(ICameraDescriptor):
                 print("Found no Thorlabs TLCam cameras\n")
             return
         if verbose:
-            print(
-                "Found {} Thorlabs TLCam camera{}".format(
-                    cam_num, "s" if cam_num > 1 else ""
-                )
-            )
+            print("Found {} Thorlabs TLCam camera{}".format(cam_num, "s" if cam_num > 1 else ""))
         for serial in cam_infos:
             try:
                 if verbose:
-                    print("Found Thorlabs TSI camera serial={}".format(serial))
+                    print(f"Found Thorlabs TSI camera serial={serial}")
                 with Thorlabs.ThorlabsTLCamera(serial) as cam:
                     yield cam, serial
             except Thorlabs.ThorlabsTLCameraError:
@@ -79,19 +75,15 @@ class ThorlabsTLCamCameraDescriptor(ICameraDescriptor):
     def generate_description(cls, idx, cam=None, info=None):
         device_info = cam.get_device_info()
         cam_desc = cls.build_cam_desc(params={"serial": info})
-        cam_desc["display_name"] = "{} {}".format(
-            device_info.model, device_info.serial_number
-        )
-        cam_name = "thorlabs_tlcam_{}".format(idx)
+        cam_desc["display_name"] = f"{device_info.model} {device_info.serial_number}"
+        cam_name = f"thorlabs_tlcam_{idx}"
         return cam_name, cam_desc
 
     def get_kind_name(self):
         return "Thorlabs Scientific Camera"
 
     def make_thread(self, name):
-        return ThorlabsTLCameraThread(
-            name=name, kwargs=self.settings["params"].as_dict()
-        )
+        return ThorlabsTLCameraThread(name=name, kwargs=self.settings["params"].as_dict())
 
     def make_gui_control(self, parent):
         return Settings_GUI(parent, cam_desc=self)

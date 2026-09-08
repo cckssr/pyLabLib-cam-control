@@ -37,9 +37,7 @@ class ActivityIndicator_GUI(container.QWidgetContainer):
         self.params.add_padding(stretch=1)
         # Timer
         self.add_timer_event("update_pinds", self.update_pinds, period=0.5)
-        self.ctl.add_thread_method(
-            "update_activity_status", self.update_activity_status
-        )
+        self.ctl.add_thread_method("update_activity_status", self.update_activity_status)
 
     def start(self):
         self.update_pinds()
@@ -75,9 +73,7 @@ class ActivityIndicator_GUI(container.QWidgetContainer):
             short_cap = caption[:3]
         g = self.pinds[group]
         if name in g:
-            raise ValueError(
-                "process indicator {} already exists in group {}".format(name, group)
-            )
+            raise ValueError(f"process indicator {name} already exists in group {group}")
         pos, order = self._find_position(group, order)
         g[name] = order
         self.params.add_text_label(
@@ -94,9 +90,7 @@ class ActivityIndicator_GUI(container.QWidgetContainer):
     def remove_pind(self, group, name):
         """Remove indicator from the table"""
         if name not in self.pinds[group]:
-            raise KeyError(
-                "process indicator {} does not exist in group {}".format(name, group)
-            )
+            raise KeyError(f"process indicator {name} does not exist in group {group}")
         del self.pinds[group][name]
         self.params.remove_widget((group, name))
 

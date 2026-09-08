@@ -1,9 +1,10 @@
-from pylablib.core.gui import utils as gui_utils, QtCore
-from pylablib.core.thread import controller
-from pylablib.core.fileio import savefile
 import datetime
-
 import os
+
+from pylablib.core.fileio import savefile
+from pylablib.core.gui import QtCore
+from pylablib.core.gui import utils as gui_utils
+from pylablib.core.thread import controller
 
 
 def crop(img, left=0, right=None, top=0, bottom=None):
@@ -42,9 +43,9 @@ def take_screenshots(src):
         gui_utils.get_screenshot(widget=src.c["cam_controller/camstat"]).save(
             sfolder + "interface_camera_status.png"
         )
-        gui_utils.get_screenshot(
-            widget=src.c["cam_controller/savebox"], border=(3, 2)
-        ).save(sfolder + "interface_save_control.png")
+        gui_utils.get_screenshot(widget=src.c["cam_controller/savebox"], border=(3, 2)).save(
+            sfolder + "interface_save_control.png"
+        )
         gui_utils.get_screenshot(widget=src.c["cam_controller/savestat"]).save(
             sfolder + "interface_save_status.png"
         )
@@ -56,9 +57,7 @@ def take_screenshots(src):
         src.c["control_tabs"].set_by_name("proc_tab")
         src.ctl.sleep(0.1)
         crop(
-            gui_utils.get_screenshot(
-                widget=src.c["control_tabs/proc_tab"], border=(9, 9, 29, 3)
-            ),
+            gui_utils.get_screenshot(widget=src.c["control_tabs/proc_tab"], border=(9, 9, 29, 3)),
             bottom=540,
         ).save(sfolder + "interface_processing.png")
         src.v["plotting/enable"] = True
@@ -97,14 +96,10 @@ def take_screenshots(src):
         src.settings_editor.close()
         src.call_extra("tutorial")
         src.ctl.sleep(0.1)
-        gui_utils.get_screenshot(window=src.tutorial_box).save(
-            sfolder + "interface_tutorial.png"
-        )
+        gui_utils.get_screenshot(window=src.tutorial_box).save(sfolder + "interface_tutorial.png")
         src.tutorial_box.close()
         if "show_attributes_window" in src.c["cam_controller/settings"].advanced_params:
-            window = src.c["cam_controller/settings"].advanced_params.c[
-                "attributes_window"
-            ]
+            window = src.c["cam_controller/settings"].advanced_params.c["attributes_window"]
             window.show()
             window.tabs.set_by_name("value")
             src.ctl.sleep(0.1)
@@ -142,11 +137,7 @@ def on_key_press(src, event):
         cam = controller.sync_controller("camera")
         fi = cam.cs.get_full_info("all")
         with open("cam_info.dat", "a") as f:
-            f.write(
-                "Camera settings on {:on %Y/%m/%d at %H:%M:%S}\n\n".format(
-                    datetime.datetime.now()
-                )
-            )
+            f.write(f"Camera settings on {datetime.datetime.now():on %Y/%m/%d at %H:%M:%S}\n\n")
             savefile.save_dict(fi, f)
             f.write("\n" * 4)
         controller._debug_mode = True

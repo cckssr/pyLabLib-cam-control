@@ -2,10 +2,10 @@
 Gaussian beam profiler filter.
 """
 
-from . import base
+import numpy as np
 from pylablib.core.dataproc import fitting
 
-import numpy as np
+from . import base
 
 
 class BeamProfileFilter(base.ISingleFrameFilter):
@@ -21,12 +21,8 @@ class BeamProfileFilter(base.ISingleFrameFilter):
         """Initial filter setup"""
         super().setup(multichannel="average")
         # Setup control parameters
-        self.add_parameter(
-            "x_position", label="X position", kind="int", limit=(0, None)
-        )
-        self.add_parameter(
-            "y_position", label="Y position", kind="int", limit=(0, None)
-        )
+        self.add_parameter("x_position", label="X position", kind="int", limit=(0, None))
+        self.add_parameter("y_position", label="Y position", kind="int", limit=(0, None))
         self.add_parameter("track_lines", label="Use plot lines", kind="check")
         self.add_parameter("track_max", label="Locate maximum", kind="check")
         self.add_parameter(
@@ -45,12 +41,8 @@ class BeamProfileFilter(base.ISingleFrameFilter):
         self.add_linepos_parameter(
             default=None
         )  # indicate that the filter needs to get a cross position as "linepos" parameter
-        self.add_rectangle(
-            "x_selection", (0, 0), (0, 0)
-        )  # add a rectangle indicating x-cut area
-        self.add_rectangle(
-            "y_selection", (0, 0), (0, 0)
-        )  # add a rectangle indicating y-cut area
+        self.add_rectangle("x_selection", (0, 0), (0, 0))  # add a rectangle indicating x-cut area
+        self.add_rectangle("y_selection", (0, 0), (0, 0))  # add a rectangle indicating y-cut area
         self.select_plotter("frame")
 
     def set_parameter(

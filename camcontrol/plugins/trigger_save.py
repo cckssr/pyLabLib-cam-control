@@ -1,9 +1,9 @@
-from . import base
-from pylablib.core.thread import controller
-from pylablib import widgets
+import time
 
 import numpy as np
-import time
+from pylablib.core.thread import controller
+
+from . import base
 
 
 class TriggerSavePlugin(base.IPlugin):
@@ -60,9 +60,7 @@ class TriggerSavePlugin(base.IPlugin):
         self.table.add_combo_box(
             "save_mode", options={"full": "Full", "snap": "Snap"}, label="Save mode"
         )
-        self.table.add_check_box(
-            "limit_videos", caption="Limit number of videos", value=False
-        )
+        self.table.add_check_box("limit_videos", caption="Limit number of videos", value=False)
         self.table.add_num_edit(
             "max_videos",
             1,
@@ -84,9 +82,7 @@ class TriggerSavePlugin(base.IPlugin):
             formatter=("float", "auto", 1),
             label="Timer period (s)",
         )
-        self.table.add_combo_box(
-            "frame_source", options=[], label="Trigger frame source"
-        )
+        self.table.add_combo_box("frame_source", options=[], label="Trigger frame source")
         self.table.add_num_edit(
             "image_trigger_threshold",
             0,
@@ -102,9 +98,7 @@ class TriggerSavePlugin(base.IPlugin):
         )
         self.table.add_text_label("status", "armed", label="Status: ")
         self.table.add_toggle_button("enabled", "Enabled", value=False)
-        self.table.vs["limit_videos"].connect(
-            lambda v: self.table.set_enabled("max_videos", v)
-        )
+        self.table.vs["limit_videos"].connect(lambda v: self.table.set_enabled("max_videos", v))
         self.table.set_enabled("max_videos", False)
 
         @controller.exsafe
@@ -156,24 +150,17 @@ class TriggerSavePlugin(base.IPlugin):
 
     @controller.call_in_gui_thread
     def _update_frame_sources_indicator(self, sources, reset_value=False):
-        index_values, options = zip(
-            *[(n, v.get("caption", n)) for n, v in sources.items()]
-        )
+        index_values, options = zip(*[(n, v.get("caption", n)) for n, v in sources.items()])
         self.table.w["frame_source"].set_options(
             options=options, index_values=index_values, index=0 if reset_value else None
         )
 
     @controller.call_in_gui_thread
     def _start_save(self, mode):
-        self.guictl.call_thread_method(
-            "toggle_saving", mode=mode, start=True, no_popup=True
-        )
+        self.guictl.call_thread_method("toggle_saving", mode=mode, start=True, no_popup=True)
         self._acquired_videos += 1
         self.table.i["max_videos"] = self._acquired_videos
-        if (
-            self._acquired_videos >= self.table.v["max_videos"]
-            and self.table.v["limit_videos"]
-        ):
+        if self._acquired_videos >= self.table.v["max_videos"] and self.table.v["limit_videos"]:
             self._last_video = True
 
     def _saving_in_progress(self):
@@ -204,9 +191,7 @@ class TriggerSavePlugin(base.IPlugin):
                 tleft = 0
             self.ctl.v["timer_trigger"] = {"time_left": tleft, "period": period}
             if tleft > 0:
-                self._update_trigger_status(
-                    "ready, {:.0f}s / {:.0f}s left".format(tleft, period)
-                )
+                self._update_trigger_status(f"ready, {tleft:.0f}s / {period:.0f}s left")
             elif saving:
                 self._update_trigger_status("recording")
             else:
@@ -236,10 +221,7 @@ class TriggerSavePlugin(base.IPlugin):
         t = time.time()
         if self.table.v["trigger_mode"] == "image":
             if self.table.v["frame_source"] == src:
-                if (
-                    self._last_save_image is None
-                    or t > self._last_save_image + dead_time
-                ):
+                if self._last_save_image is None or t > self._last_save_image + dead_time:
                     if np.any(frame > self.table.v["image_trigger_threshold"]):
                         if (
                             not (self._saving_in_progress() or self._last_video)
@@ -252,10 +234,7 @@ class TriggerSavePlugin(base.IPlugin):
                     and t < self._last_save_image + self._trigger_display_time
                 ):
                     self._update_trigger_status("triggered")
-                elif (
-                    self._last_save_image is not None
-                    and t < self._last_save_image + dead_time
-                ):
+                elif self._last_save_image is not None and t < self._last_save_image + dead_time:
                     self._update_trigger_status("dead time")
                 else:
                     self._update_trigger_status("ready")

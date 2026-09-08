@@ -1,13 +1,12 @@
+import collections
+import time
+
+import numpy as np
 from pylablib.devices.interface import camera
 from pylablib.thread.devices.generic.camera import GenericCameraThread
 
-from .base import ICameraDescriptor
 from ..gui.base_cam_ctl_gui import GenericCameraSettings_GUI, GenericCameraStatus_GUI
-
-import time
-import collections
-import numpy as np
-
+from .base import ICameraDescriptor
 
 TDeviceInfo = collections.namedtuple("TDeviceInfo", ["kind"])
 
@@ -123,15 +122,11 @@ class SimulatedCamera(camera.IROICamera, camera.IExposureCamera):
 
     def _get_base_frame(self):
         """Generate the base static noise-free frame"""
-        xs, ys = np.meshgrid(
-            np.arange(self._size[0]), np.arange(self._size[1]), indexing="ij"
-        )
+        xs, ys = np.meshgrid(np.arange(self._size[0]), np.arange(self._size[1]), indexing="ij")
         ip, jp = self._size[0] / 2, self._size[1] / 2
         iw, jw = self._size[0] / 10, self._size[0] / 20
         mag = 1024
-        return (
-            np.exp(-((xs - ip) ** 2) / (2 * iw**2) - (ys - jp) ** 2 / (2 * jw**2)) * mag
-        )
+        return np.exp(-((xs - ip) ** 2) / (2 * iw**2) - (ys - jp) ** 2 / (2 * jw**2)) * mag
 
     def _read_frames(self, rng, return_info=False):
         c0, c1, r0, r1 = self._roi
@@ -179,9 +174,7 @@ class SimulatedCameraDescriptor(ICameraDescriptor):
         return "Simulated camera"
 
     def make_thread(self, name):
-        return SimulatedCameraThread(
-            name=name, kwargs=self.settings["params"].as_dict()
-        )
+        return SimulatedCameraThread(name=name, kwargs=self.settings["params"].as_dict())
 
     def make_gui_control(self, parent):
         return GenericCameraSettings_GUI(parent, cam_desc=self)

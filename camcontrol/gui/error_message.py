@@ -25,9 +25,7 @@ class ErrorBox(QtWidgets.QFrame):
         self.text_layout.addWidget(self.message_label)
         link = "https://github.com/SandoghdarLab/pyLabLib-cam-control/issues"
         email = "pylablib@gmail.com"
-        contact_text = "If the error keeps occuring, contact the developer on <a href='{link:}'>GitHub</a> or via email at <a href='{email:}'>{email:}</a>".format(
-            link=link, email=email
-        )
+        contact_text = f"If the error keeps occuring, contact the developer on <a href='{link}'>GitHub</a> or via email at <a href='{email}'>{email}</a>"
         self.contact_label = QtWidgets.QLabel(text=contact_text, parent=self)
         self.contact_label.setOpenExternalLinks(True)
         self.text_layout.addWidget(self.contact_label)

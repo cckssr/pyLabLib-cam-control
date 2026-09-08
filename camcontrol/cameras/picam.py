@@ -1,9 +1,9 @@
 from pylablib.devices import PrincetonInstruments
 from pylablib.thread.devices.PrincetonInstruments import PicamCameraThread
 
-from .base import ICameraDescriptor
-from ..gui import cam_gui_parameters, cam_attributes_browser
+from ..gui import cam_attributes_browser, cam_gui_parameters
 from ..gui.base_cam_ctl_gui import GenericCameraSettings_GUI, GenericCameraStatus_GUI
+from .base import ICameraDescriptor
 
 
 class CamAttributesBrowser(cam_attributes_browser.CamAttributesBrowser):
@@ -70,9 +70,7 @@ class Settings_GUI(GenericCameraSettings_GUI):
     def setup_settings_tables(self):
         super().setup_settings_tables()
         self.add_parameter(
-            cam_gui_parameters.AttributesBrowserGUIParameter(
-                self, CamAttributesBrowser
-            ),
+            cam_gui_parameters.AttributesBrowserGUIParameter(self, CamAttributesBrowser),
             "advanced",
         )
 
@@ -104,17 +102,15 @@ class PicamCameraDescriptor(ICameraDescriptor):
         for i, cdesc in enumerate(cams):
             if verbose:
                 print(
-                    "Found Picam camera serial number={}\n\tModel {},   name {}".format(
-                        i, cdesc.model, cdesc.name
-                    )
+                    f"Found Picam camera serial number={i}\n\tModel {cdesc.model},   name {cdesc.name}"
                 )
             yield None, cdesc
 
     @classmethod
     def generate_description(cls, idx, cam=None, info=None):
         cam_desc = cls.build_cam_desc(params={"serial_number": info.serial_number})
-        cam_desc["display_name"] = "{} {}".format(info.model, info.serial_number)
-        cam_name = "picam_{}".format(idx)
+        cam_desc["display_name"] = f"{info.model} {info.serial_number}"
+        cam_name = f"picam_{idx}"
         return cam_name, cam_desc
 
     def get_kind_name(self):

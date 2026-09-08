@@ -1,6 +1,6 @@
-import subprocess
 import argparse
 import shutil
+import subprocess
 
 
 def clear_build():

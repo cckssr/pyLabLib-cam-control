@@ -1,14 +1,15 @@
-from pylablib.core.thread import controller
-from pylablib.core.gui.widgets import container, param_table
 from pylablib.core.gui import QtGui
+from pylablib.core.gui.widgets import container, param_table
+from pylablib.core.thread import controller
+
+from camcontrol.resources import resource_path
 
 from .cam_gui_parameters import (
-    FloatGUIParameter,
     BoolGUIParameter,
     EnumGUIParameter,
+    FloatGUIParameter,
     ROIGUIParameter,
 )
-from camcontrol.resources import resource_path
 
 
 class ICameraSettings_GUI(container.QWidgetContainer):
@@ -36,9 +37,7 @@ class ICameraSettings_GUI(container.QWidgetContainer):
         self.cam_ctl = ctl
         self._default_values = None
         self._gui_parameters = []
-        self._roi_kind = self.cam_ctl.settings.get(
-            "interface/cam_control/roi_kind", self._roi_kind
-        )
+        self._roi_kind = self.cam_ctl.settings.get("interface/cam_control/roi_kind", self._roi_kind)
         settings_tabs = self.add_child("settings_tabs", container.QTabContainer(self))
         settings_tabs.setup()
         self.common_params = settings_tabs.add_tab("common", "Common").add_child(
@@ -55,32 +54,20 @@ class ICameraSettings_GUI(container.QWidgetContainer):
         self.advanced_params.add_padding()
         self.common_params.update_indicators()
         self.advanced_params.update_indicators()
-        self.settings_params = self.add_child(
-            "settings_params", param_table.ParamTable(self)
-        )
+        self.settings_params = self.add_child("settings_params", param_table.ParamTable(self))
         self.settings_params.setup(add_indicator=False)
-        self.settings_params.add_check_box(
-            "auto_apply", caption="Apply automatically", value=True
-        )
+        self.settings_params.add_check_box("auto_apply", caption="Apply automatically", value=True)
         self.settings_params.add_button("apply", "Apply")
-        self.settings_params.add_button(
-            "start", "Start acquisition", location=("next", 0, 1, 1)
-        )
-        self.settings_params.add_button(
-            "stop", "Stop acquisition", location=(-1, 1, 1, 1)
-        )
+        self.settings_params.add_button("start", "Start acquisition", location=("next", 0, 1, 1))
+        self.settings_params.add_button("stop", "Stop acquisition", location=(-1, 1, 1, 1))
         self.settings_params.w["start"].setIcon(
             QtGui.QIcon(QtGui.QPixmap(resource_path("play.png")))
         )
         self.settings_params.w["stop"].setIcon(
             QtGui.QIcon(QtGui.QPixmap(resource_path("stop.png")))
         )
-        self.settings_params.add_button(
-            "connect", "Connect", location=("next", 0, 1, 1)
-        )
-        self.settings_params.add_button(
-            "disconnect", "Disconnect", location=(-1, 1, 1, 1)
-        )
+        self.settings_params.add_button("connect", "Connect", location=("next", 0, 1, 1))
+        self.settings_params.add_button("disconnect", "Disconnect", location=(-1, 1, 1, 1))
         self.settings_params.vs["apply"].connect(self.cam_ctl.send_parameters)
         self.settings_params.vs["start"].connect(self.cam_ctl.acq_start)
         self.settings_params.vs["stop"].connect(self.cam_ctl.acq_stop)
@@ -108,7 +95,7 @@ class ICameraSettings_GUI(container.QWidgetContainer):
             return self.common_params
         if tab == "advanced":
             return self.advanced_params
-        raise ValueError("unrecognized tab: {}".format(tab))
+        raise ValueError(f"unrecognized tab: {tab}")
 
     def add_parameter(self, param, tab, **kwargs):
         """Add the given parameter to the given tab (``"common"`` or ``"advanced"``)"""
@@ -202,13 +189,9 @@ class GenericCameraSettings_GUI(ICameraSettings_GUI):
                 indicator=indicator,
             )
         if name == "roi":
-            return ROIGUIParameter(
-                self, bin_kind=self._bin_kind, roi_kind=self._roi_kind
-            )
+            return ROIGUIParameter(self, bin_kind=self._bin_kind, roi_kind=self._roi_kind)
         if name == "trigger_mode":
-            return EnumGUIParameter(
-                self, "trigger_mode", "Trigger mode", self._trigger_modes
-            )
+            return EnumGUIParameter(self, "trigger_mode", "Trigger mode", self._trigger_modes)
         if name == "add_info":
             parameter = BoolGUIParameter(self, "add_info", "Acquire frame info")
             parameter.allow_diff_update = True
@@ -261,9 +244,7 @@ class GenericCameraStatus_GUI(param_table.StatusTable):
 
         def set_connection_style(v):
             self.w["connection"].setStyleSheet(
-                "background: gold; font-weight: bold; color: black"
-                if v == "Disconnected"
-                else ""
+                "background: gold; font-weight: bold; color: black" if v == "Disconnected" else ""
             )
 
         self.add_status_line(
@@ -301,7 +282,7 @@ class GenericCameraStatus_GUI(param_table.StatusTable):
             if p in params:
                 self.v[p] = params[p]
         dropped = params["frames/acquired"] - params["frames/read"]
-        sdropped = "<b>{:d}</b>".format(dropped) if dropped else "0"
+        sdropped = f"<b>{dropped:d}</b>" if dropped else "0"
         self.v["frames/readstat"] = "{:d} | {}".format(params["frames/read"], sdropped)
         if "frames/buffer_filled" in params and "buffer_size" in params:
             self.v["frames/buffstat"] = "{:d} / {:d}".format(

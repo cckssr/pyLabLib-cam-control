@@ -1,10 +1,9 @@
-from pylablib.core.thread import controller
-from pylablib.core.dataproc import ctransform
-from pylablib.core.gui.widgets import container
-from pylablib.thread.stream.stream_message import FramesMessage
-
-from pylablib.core.gui import Signal
 import numpy as np
+from pylablib.core.dataproc import ctransform
+from pylablib.core.gui import Signal
+from pylablib.core.gui.widgets import container
+from pylablib.core.thread import controller
+from pylablib.thread.stream.stream_message import FramesMessage
 
 
 class GenericCameraCtl(container.QContainer):
@@ -51,9 +50,7 @@ class GenericCameraCtl(container.QContainer):
     def setup(self):
         super().setup()
         self.saver = (
-            controller.sync_controller(self.save_thread, "run")
-            if self.save_thread
-            else None
+            controller.sync_controller(self.save_thread, "run") if self.save_thread else None
         )
         self.snap_saver = (
             controller.sync_controller(self.snap_save_thread, "start")
@@ -128,9 +125,7 @@ class GenericCameraCtl(container.QContainer):
             short_cap="Con",
             order=0,
         )
-        connection_updater = status_updater(
-            {"opened": "on", "opening": "pause", "closing": "off"}
-        )
+        connection_updater = status_updater({"opened": "on", "opening": "pause", "closing": "off"})
         self.resource_manager.cs.add_multicast_updater(
             "process_activity",
             "camera/connection",
@@ -220,9 +215,7 @@ class GenericCameraCtl(container.QContainer):
         )
 
     @controller.exsafe
-    def toggle_saving(
-        self, mode, start=True, source=None, change_params=None, no_popup=False
-    ):
+    def toggle_saving(self, mode, start=True, source=None, change_params=None, no_popup=False):
         """
         Turn saving on/off (connected to a button in saving control)
 
@@ -276,16 +269,12 @@ class GenericCameraCtl(container.QContainer):
                             format=params["format"],
                             save_settings=params["save_settings"],
                         )
-                        self.send_snap_frame(
-                            source=source or params["snap_display_source"]
-                        )
+                        self.send_snap_frame(source=source or params["snap_display_source"])
                 else:
                     self.snap_saver.ca.save_stop()
                     self._call_event_hook("gui/saving/snap/stop")
             self.update_parameters(
-                update={"status/saving": "in_progress"}
-                if (start and mode == "full")
-                else None
+                update={"status/saving": "in_progress"} if (start and mode == "full") else None
             )
 
     def saving_in_progress(self):
@@ -309,9 +298,9 @@ class GenericCameraCtl(container.QContainer):
     def send_snap_frame(self, source=None):
         """Send a multicast with the source frame to the snap saver"""
         if self.resource_manager and source is not None:
-            frame = self.resource_manager.cs.get_resource(
-                "frame/display", source, default={}
-            ).get("frame", None)
+            frame = self.resource_manager.cs.get_resource("frame/display", source, default={}).get(
+                "frame", None
+            )
         else:
             frame = self._last_shown_frame
         if frame is not None:
@@ -333,9 +322,7 @@ class GenericCameraCtl(container.QContainer):
         if self.saver:
             params = self.settings.get("saving/defaults", {})
             params.update(self.c["savebox"].collect_parameters(resolve_path=False))
-            self.saver.ca.setup_pretrigger(
-                params["pretrigger_size"], params["pretrigger_enabled"]
-            )
+            self.saver.ca.setup_pretrigger(params["pretrigger_size"], params["pretrigger_enabled"])
 
     @controller.exsafe
     def clear_pretrigger(self):
@@ -349,9 +336,7 @@ class GenericCameraCtl(container.QContainer):
         if self.saver:
             params = self.settings.get("saving/defaults", {})
             params.update(self.c["savebox"].collect_parameters(resolve_path=False))
-            self.saver.ca.setup_streaming(
-                single_shot=params["stream_mode"] == "single_shot"
-            )
+            self.saver.ca.setup_streaming(single_shot=params["stream_mode"] == "single_shot")
 
     # Obtain all parameters from the camera
     def get_thread_parameters(self):
@@ -369,12 +354,8 @@ class GenericCameraCtl(container.QContainer):
         ]:
             params[s] = self.dev.v[s]
         if self.saver:
-            params["status/saving"] = self.saver.get_variable(
-                "status/saving", "stopped"
-            )
-            params["status/error"] = self.saver.get_variable(
-                "status/error", ("none", None)
-            )
+            params["status/saving"] = self.saver.get_variable("status/saving", "stopped")
+            params["status/error"] = self.saver.get_variable("status/error", ("none", None))
             for n in [
                 "saved",
                 "missed",
@@ -445,10 +426,7 @@ class GenericCameraCtl(container.QContainer):
             if only_diff:
                 send_params = params.copy()
                 for p in params:
-                    if (
-                        p in self._last_parameters
-                        and self._last_parameters[p] == params[p]
-                    ):
+                    if p in self._last_parameters and self._last_parameters[p] == params[p]:
                         del send_params[p]
                 if dependencies:
                     dps = set()
@@ -475,9 +453,7 @@ class GenericCameraCtl(container.QContainer):
             max_size = self.settings["interface/plotter/binning/max_size"]
             bin_mode = self.settings.get("interface/plotter/binning/mode", "mean")
             binning = (max(frame.shape[:2]) - 1) // max_size + 1
-            self.c["plotter_area"].set_binning(
-                binning, binning, bin_mode, update_image=False
-            )
+            self.c["plotter_area"].set_binning(binning, binning, bin_mode, update_image=False)
         self.c["plotter_area"].set_image(frame)
         if self.c["plotter_area"].update_expected():
             roi = tuple(msg.mi.roi) + (1, 1)
@@ -520,11 +496,11 @@ class GenericCameraCtl(container.QContainer):
             elif comm[1] == "hide":
                 updated = self.c["plotter_area"].show_rectangles(False, names=val)
             else:
-                raise ValueError("unrecognized rectangle command: {}".format(comm[1:]))
+                raise ValueError(f"unrecognized rectangle command: {comm[1:]}")
             if updated:
                 self.c["plotter_area"].update_image(do_redraw=True)
         else:
-            raise ValueError("unrecognized rectangle command: {}".format(comm))
+            raise ValueError(f"unrecognized rectangle command: {comm}")
 
     # Loading and saving of parameters
     def get_all_values(self):

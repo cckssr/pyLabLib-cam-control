@@ -1,1 +1,1 @@
-from .base import PluginThreadController, PluginManager, IPlugin, find_plugins
+from .base import IPlugin, PluginManager, PluginThreadController, find_plugins

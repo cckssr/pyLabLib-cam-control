@@ -1,7 +1,6 @@
+import numpy as np
 from pylablib.core.thread import controller
 from pylablib.gui.widgets import range_controls
-
-import numpy as np
 
 
 class IGUIParameter:
@@ -115,9 +114,7 @@ class SingleGUIParameter(IGUIParameter):
             self.connect_updater(self.gui_name)
 
     def setup(self, parameters, full_info):
-        self.base.set_enabled(
-            self.gui_name, self.cam_name in parameters or self.indirect
-        )
+        self.base.set_enabled(self.gui_name, self.cam_name in parameters or self.indirect)
 
     def to_camera(self, gui_value):
         """Convert widget value to camera parameter value"""
@@ -134,13 +131,9 @@ class SingleGUIParameter(IGUIParameter):
     def display(self, parameters):
         if self.cam_name in parameters and not self.disabled:
             if self.indicator:
-                self.settings.v[self.gui_name] = self.from_camera(
-                    parameters[self.cam_name]
-                )
+                self.settings.v[self.gui_name] = self.from_camera(parameters[self.cam_name])
             elif self.add_indicator:
-                self.settings.i[self.gui_name] = self.from_camera(
-                    parameters[self.cam_name]
-                )
+                self.settings.i[self.gui_name] = self.from_camera(parameters[self.cam_name])
 
 
 class IntGUIParameter(SingleGUIParameter):
@@ -299,17 +292,11 @@ class FloatGUIParameter(SingleGUIParameter):
         super().add(base)
 
     def to_camera(self, gui_value):
-        return (
-            self.to_camera_func(gui_value)
-            if self.to_camera_func
-            else gui_value / self.factor
-        )
+        return self.to_camera_func(gui_value) if self.to_camera_func else gui_value / self.factor
 
     def from_camera(self, cam_value):
         return (
-            self.from_camera_func(cam_value)
-            if self.from_camera_func
-            else cam_value * self.factor
+            self.from_camera_func(cam_value) if self.from_camera_func else cam_value * self.factor
         )
 
 
@@ -381,9 +368,7 @@ class EnumGUIParameter(SingleGUIParameter):
                 row %= base.get_layout_shape()[0]
             base.insert_row(row)
         if self.indicator:
-            base.add_text_label(
-                self.gui_name, self.label, value=self._get_label(self.default)
-            )
+            base.add_text_label(self.gui_name, self.label, value=self._get_label(self.default))
         else:
             base.add_combo_box(
                 self.gui_name,
@@ -408,11 +393,7 @@ class EnumGUIParameter(SingleGUIParameter):
                 raise
 
     def from_camera(self, cam_value):
-        return (
-            self._get_label(cam_value)
-            if self.indicator
-            else super().from_camera(cam_value)
-        )
+        return self._get_label(cam_value) if self.indicator else super().from_camera(cam_value)
 
 
 class BoolGUIParameter(SingleGUIParameter):
@@ -442,9 +423,7 @@ class BoolGUIParameter(SingleGUIParameter):
                 row %= base.get_layout_shape()[0]
             base.insert_row(row)
         if self.indicator:
-            base.add_text_label(
-                self.gui_name, self.label, value=self._get_label(self.default)
-            )
+            base.add_text_label(self.gui_name, self.label, value=self._get_label(self.default))
         else:
             base.add_check_box(
                 self.gui_name,
@@ -458,11 +437,7 @@ class BoolGUIParameter(SingleGUIParameter):
         super().add(base)
 
     def from_camera(self, cam_value):
-        return (
-            self._get_label(cam_value)
-            if self.indicator
-            else super().from_camera(cam_value)
-        )
+        return self._get_label(cam_value) if self.indicator else super().from_camera(cam_value)
 
 
 class ROIGUIParameter(IGUIParameter):
@@ -491,9 +466,7 @@ class ROIGUIParameter(IGUIParameter):
         self.roi_ctl.params.set_enabled("y_bin", self.bin_kind not in {"same", "none"})
         self.roi_ctl.set_value(((0, 1e5, 1), (0, 1e5, 1)))
         base.add_custom_widget("roi", self.roi_ctl)
-        with base.using_new_sublayout(
-            "roi_buttons", "hbox", location=("next", 0, 1, "end")
-        ):
+        with base.using_new_sublayout("roi_buttons", "hbox", location=("next", 0, 1, "end")):
 
             @controller.exsafe
             def _select_roi(v):
@@ -527,15 +500,11 @@ class ROIGUIParameter(IGUIParameter):
                 add_indicator=False,
                 location=("next", 2, 1, 1),
             ).get_value_changed_signal().connect(_full_roi)
-        with base.using_new_sublayout(
-            "show_rectangles", "hbox", location=("next", 0, 1, "end")
-        ):
+        with base.using_new_sublayout("show_rectangles", "hbox", location=("next", 0, 1, "end")):
             base.add_check_box("show_gui_roi", "Show selected ROI", add_indicator=False)
             base.add_check_box("show_det_size", "Show full frame", add_indicator=False)
         base.add_spacer(5)
-        with base.using_new_sublayout(
-            "roi_labels", "grid", location=("next", 0, 1, "end")
-        ):
+        with base.using_new_sublayout("roi_labels", "grid", location=("next", 0, 1, "end")):
             base.add_text_label("roi_indicator", label="ROI")
             base.add_text_label("size_indicator", label="Image size")
             base.get_sublayout().setColumnStretch(1, 1)
@@ -545,9 +514,7 @@ class ROIGUIParameter(IGUIParameter):
             base.vs[n].connect(self._switch_to_standard_tab)
         base.vs["roi"].connect(controller.exsafe(self._update_value))
         if "plotter_area" in self.settings.cam_ctl.c:
-            self.settings.cam_ctl.c["plotter_area"].frame_selected.connect(
-                self.on_roi_select
-            )
+            self.settings.cam_ctl.c["plotter_area"].frame_selected.connect(self.on_roi_select)
 
     @controller.exsafe
     def on_roi_select(self):
@@ -587,12 +554,9 @@ class ROIGUIParameter(IGUIParameter):
             det_size = (self.roi_ctl.xlim[1], self.roi_ctl.ylim[1])
             full_roi_size = np.array(det_size)
             full_roi_center = np.array(det_size) / 2
+            cam_ctl.plot_control("rectangles/set", ("full_roi", full_roi_center, full_roi_size))
             cam_ctl.plot_control(
-                "rectangles/set", ("full_roi", full_roi_center, full_roi_size)
-            )
-            cam_ctl.plot_control(
-                "rectangles/"
-                + ("show" if self.settings.v["show_det_size"] else "hide"),
+                "rectangles/" + ("show" if self.settings.v["show_det_size"] else "hide"),
                 ("full_roi",),
             )
 
@@ -640,15 +604,13 @@ class ROIGUIParameter(IGUIParameter):
         roi = parameters["roi"]
         roi_str = "[{:d} - {:d}] x [{:d} - {:d}]".format(*roi)
         if self.bin_kind == "same":
-            roi_str += "  Bin {:d}".format(roi[4])
+            roi_str += f"  Bin {roi[4]:d}"
         elif self.bin_kind == "both":
             roi_str += "  Bin {:d}x{:d}".format(*roi[4:6])
         self.settings.v["roi_indicator"] = roi_str
         xbin = roi[4] if len(roi) > 4 else 1
         ybin = roi[5] if len(roi) > 5 else xbin
-        size_str = "{:d} x {:d}".format(
-            (roi[1] - roi[0]) // xbin, (roi[3] - roi[2]) // ybin
-        )
+        size_str = f"{(roi[1] - roi[0]) // xbin:d} x {(roi[3] - roi[2]) // ybin:d}"
         self.settings.v["size_indicator"] = size_str
         super().display(parameters)
 
@@ -689,11 +651,7 @@ class AttributesBrowserGUIParameter(IGUIParameter):
         self._startup_done = False
 
     def display(self, parameters):
-        if (
-            self._connected
-            and not self._startup_done
-            and parameters.get("tag/initialized", False)
-        ):
+        if self._connected and not self._startup_done and parameters.get("tag/initialized", False):
             self.attr_window.setup_startup()
             self._startup_done = True
         self.attr_window.update_attributes()

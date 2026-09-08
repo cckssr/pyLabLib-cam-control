@@ -1,6 +1,6 @@
 import os
-import sys
 import subprocess
+import sys
 import time
 
 
@@ -23,9 +23,7 @@ def pip_install(pkg, upgrade=False):
     If ``upgrade==True``, call with ``--upgrade`` key (upgrade current version if it is already installed).
     """
     if upgrade:
-        subprocess.call(
-            [get_executable(console=True), "-m", "pip", "install", "--upgrade", pkg]
-        )
+        subprocess.call([get_executable(console=True), "-m", "pip", "install", "--upgrade", pkg])
     else:
         subprocess.call([get_executable(console=True), "-m", "pip", "install", pkg])
 
@@ -33,11 +31,11 @@ def pip_install(pkg, upgrade=False):
 def install_wheel(path, upgrade=True, verbose=True):
     """Install a wheel file with the given path, if it exists"""
     if verbose:
-        print("Installing {}".format(path))
+        print(f"Installing {path}")
     if os.path.exists(path):
         pip_install(path, upgrade=upgrade)
     elif verbose:
-        print("Could not find file {}".format(path))
+        print(f"Could not find file {path}")
 
 
 def main():

@@ -2,10 +2,10 @@
 Example template module for custom-defined filters.
 """
 
-from . import base
-
 import numpy as np
 import scipy.ndimage
+
+from . import base
 
 
 class TemplateSingleFrameFilter(base.ISingleFrameFilter):
@@ -32,16 +32,16 @@ class TemplateMultiFrameFilter(base.IMultiFrameFilter):
 
     # _class_name="template"  # NOTE: uncomment this line to enable the filter
     _class_caption = "Template multi-frame filter"
-    _class_description = "This is a template multi-frame filter, which simply returns the average of all frames"
+    _class_description = (
+        "This is a template multi-frame filter, which simply returns the average of all frames"
+    )
 
     def setup(self):
         super().setup(process_incomplete=True)
         self.add_parameter(
             "length", label="Number of frames", kind="int", limit=(1, None), default=20
         )
-        self.add_parameter(
-            "period", label="Frame step", kind="int", limit=(1, None), default=1
-        )
+        self.add_parameter("period", label="Frame step", kind="int", limit=(1, None), default=1)
 
     def set_parameter(self, name, value):
         super().set_parameter(name, value)

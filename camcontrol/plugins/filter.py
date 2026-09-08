@@ -1,17 +1,17 @@
-from . import base
-from pylablib.core.utils import dictionary
-from pylablib.core.thread import controller
-from pylablib.thread.stream import StreamSource, FramesMessage
-from pylablib.devices.interface.camera import remove_status_line
-from pylablib import widgets
-
-import numpy as np
 import os
 import sys
 
+import numpy as np
+from pylablib import widgets
+from pylablib.core.thread import controller
+from pylablib.core.utils import dictionary
+from pylablib.devices.interface.camera import remove_status_line
+from pylablib.thread.stream import FramesMessage, StreamSource
 
-from .filters.base import IFrameFilter
 from camcontrol.gui import DisplaySettings_ctl, ProcessingIndicator_ctl
+
+from . import base
+from .filters.base import IFrameFilter
 
 
 class FilterPanel(widgets.QFrameContainer):
@@ -80,9 +80,7 @@ class FilterPanel(widgets.QFrameContainer):
         @controller.exsafe
         def on_lines_move():
             if self.params.v["enabled"]:
-                self.plugin.ca.set_parameter(
-                    "linepos", self.plotter.plt.get_line_positions()
-                )
+                self.plugin.ca.set_parameter("linepos", self.plotter.plt.get_line_positions())
 
         self.plotter.plt.lines_updated.connect(on_lines_move)
         self.add_spacer(20)
@@ -97,9 +95,7 @@ class FilterPanel(widgets.QFrameContainer):
         def set_filter_defaults(filter_defaults):
             self.filter_defaults = filter_defaults
 
-        self.add_property_element(
-            "defaults", lambda: self.filter_defaults, set_filter_defaults
-        )
+        self.add_property_element("defaults", lambda: self.filter_defaults, set_filter_defaults)
 
     def start(self):
         self.load_default_values()
@@ -148,9 +144,7 @@ class FilterPanel(widgets.QFrameContainer):
             elif pkind == "button":
                 self.filter_params_table.add_button(pname, caption=plabel)
             elif pkind == "check":
-                self.filter_params_table.add_check_box(
-                    pname, value=bool(pdefault), caption=plabel
-                )
+                self.filter_params_table.add_check_box(pname, value=bool(pdefault), caption=plabel)
             elif pkind == "select":
                 self.filter_params_table.add_combo_box(
                     pname,
@@ -165,7 +159,7 @@ class FilterPanel(widgets.QFrameContainer):
                 else:
                     self.filter_params_table.add_virtual_element(pname, value=pdefault)
             else:
-                raise ValueError("unrecognized parameter kind: {}".format(pkind))
+                raise ValueError(f"unrecognized parameter kind: {pkind}")
         self.load_default_values(name, exclude=["__plotter__"])
 
     @controller.call_in_gui_thread
@@ -188,10 +182,8 @@ class FilterPanel(widgets.QFrameContainer):
         if self.plotter is not None and data is not None:
             new_plotter = data.get("source", None)
             new_selector = data.get("plotter/selector", None)
-            plotter_updated = (
-                new_plotter != self.current_plotter
-                or new_selector
-                != self.get_aux(self.current_plotter, "plotter_selector")
+            plotter_updated = new_plotter != self.current_plotter or new_selector != self.get_aux(
+                self.current_plotter, "plotter_selector"
             )
             if plotter_updated:
                 self.store_default_values(self.current_plotter, include=["__plotter__"])
@@ -212,24 +204,16 @@ class FilterPanel(widgets.QFrameContainer):
                 self.plotter.plt.del_rectangle(n)
             if "frame" in data:
                 self.plotter.plt.set_image(data["frame"])
-                image_updated = bool(
-                    self.plotter.plt.update_image(do_redraw=plotter_updated)
-                )
+                image_updated = bool(self.plotter.plt.update_image(do_redraw=plotter_updated))
             elif plotter_updated:
                 self.plotter.plt.set_image([[np.nan]])
                 self.plotter.plt.update_image(do_redraw=True)
             self.current_plotter = new_plotter
         self.filter_params_table.set_all_indicators(values)
         self.filter_status_table.set_all_values(values)
-        if (
-            self.isVisible()
-            and self.plotter is not None
-            and not self.plotter.isVisible()
-        ):
+        if self.isVisible() and self.plotter is not None and not self.plotter.isVisible():
             self.params.v["filter_tab_label"] = "Currently displaying a non-filter tab"
-            self.params.w["filter_tab_label"].setStyleSheet(
-                "background: gold; color: black"
-            )
+            self.params.w["filter_tab_label"].setStyleSheet("background: gold; color: black")
         else:
             self.params.v["filter_tab_label"] = ""
             self.params.w["filter_tab_label"].setStyleSheet("")
@@ -250,9 +234,7 @@ class FilterPanel(widgets.QFrameContainer):
         selector = self.get_aux(plotter, "plotter_selector")
         selector_values = self.get_aux(plotter, ("plotter", selector))
         if selector_values is not None:
-            self.filter_defaults.add_entry(
-                (plotter, "__plotter__"), selector_values, force=True
-            )
+            self.filter_defaults.add_entry((plotter, "__plotter__"), selector_values, force=True)
 
     def _store_plotter_selector(self, plotter):
         selector = self.get_aux(plotter, "plotter_selector")
@@ -338,17 +320,13 @@ class FilterPanel(widgets.QFrameContainer):
         values = self.get_filter_parameters()
         exclude = (list(exclude) if exclude else []) + ["__aux__"]
         for k in exclude:
-            values.add_entry(
-                k, self.filter_defaults.get(name, {}).get(k, {}), force=True
-            )
+            values.add_entry(k, self.filter_defaults.get(name, {}).get(k, {}), force=True)
         if include is None:
             self.filter_defaults.add_entry(name, values, force=True)
         else:
             include = [dictionary.normalize_path(k) for k in include]
             for k in include:
-                self.filter_defaults.add_entry(
-                    [name] + k, values.get(k, {}), force=True
-                )
+                self.filter_defaults.add_entry([name] + k, values.get(k, {}), force=True)
 
 
 class FilterThread(controller.QTaskThread):
@@ -423,9 +401,7 @@ class FilterThread(controller.QTaskThread):
             ):
                 self.fctl.set_parameter(p["name"], p["default"])
         self.v["filter_props/parameters"] = {
-            p["name"]: p
-            for p in fctl.description.get("gui/parameters", [])
-            if "name" in p
+            p["name"]: p for p in fctl.description.get("gui/parameters", []) if "name" in p
         }
         self.v["filter_desc"] = fctl.description
         self.single_frame = not fctl.description.get("receive_all_frames", False)
@@ -474,19 +450,13 @@ class FilterThread(controller.QTaskThread):
                 if frames and frames[0].ndim == 2 + chandim
                 else np.concatenate(frames, axis=0)
             )
-        frames = remove_status_line(
-            frames, status_line, policy=self.status_line_policy, copy=False
-        )
+        frames = remove_status_line(frames, status_line, policy=self.status_line_policy, copy=False)
         self.fctl.receive_frames(frames)
         self._filter_received = True
 
     def prime_filter(self):
         """Feed the latest received frame to a newly loaded filter"""
-        if (
-            self.fctl is not None
-            and self._last_frame is not None
-            and not self._filter_received
-        ):
+        if self.fctl is not None and self._last_frame is not None and not self._filter_received:
             self.fctl.receive_frames(self._last_frame[None, :, :])
             self._filter_received = True
 
@@ -500,9 +470,7 @@ class FilterThread(controller.QTaskThread):
         else:
             data = {"frame": self._last_frame} if self._last_frame is not None else {}
         data["source"] = (
-            self.fctl.get_class_name()
-            if (self.enabled and self.fctl is not None)
-            else None
+            self.fctl.get_class_name() if (self.enabled and self.fctl is not None) else None
         )
         if "frame" in data:
             self.send_multicast(
@@ -586,25 +554,19 @@ class FilterPlugin(base.IPlugin):
             [
                 (
                     "binning",
-                    ProcessingIndicator_ctl.binning_item(
-                        self.extctls["preprocessor"].name
-                    ),
+                    ProcessingIndicator_ctl.binning_item(self.extctls["preprocessor"].name),
                 ),
                 ("filter", ("Filter", self._get_filter_state)),
             ],
             update=False,
         )
-        self.plotter = self.plot_tab.add_to_layout(
-            widgets.ImagePlotterCombined(self.plot_tab)
-        )
+        self.plotter = self.plot_tab.add_to_layout(widgets.ImagePlotterCombined(self.plot_tab))
         self.plotter.setup(name="image_plotter", ctl_caption="Image settings")
         self.plotter.w["minlim"].set_formatter(".02f")
         self.plotter.w["maxlim"].set_formatter(".02f")
         self.plotter.v["normalize"] = True
         with self.plotter.using_layout("sidebar"):
-            self.display_settings_table = DisplaySettings_ctl.DisplaySettings_GUI(
-                self.plotter
-            )
+            self.display_settings_table = DisplaySettings_ctl.DisplaySettings_GUI(self.plotter)
             self.plotter.add_child(
                 "display_settings_table",
                 self.display_settings_table,
@@ -618,21 +580,15 @@ class FilterPlugin(base.IPlugin):
                 lambda v: self.ctl.ca.change_job_period("update_plots", v)
             )
         self.plotter.plt.set_colormap("hot_sat")
-        self.filter_panel = self.gui.add_control_tab(
-            "ctl_tab", self.caption, kind=FilterPanel
-        )
+        self.filter_panel = self.gui.add_control_tab("ctl_tab", self.caption, kind=FilterPanel)
         self.filter_panel.setup(self, self.filter_captions, plotter=self.plotter)
         self.proc_indicator.update_indicators()
         self.gui.control_tabs.currentChanged.connect(self._check_tab)
 
     @controller.exsafe
     def _check_tab(self, index):
-        if self.gui.is_running() and index == self.gui.control_tabs.indexOf(
-            self.filter_panel
-        ):
-            self.gui.plot_tabs.setCurrentIndex(
-                self.gui.plot_tabs.indexOf(self.plot_tab)
-            )
+        if self.gui.is_running() and index == self.gui.control_tabs.indexOf(self.filter_panel):
+            self.gui.plot_tabs.setCurrentIndex(self.gui.plot_tabs.indexOf(self.plot_tab))
 
     def cleanup(self):
         self.unload_filter()
@@ -650,9 +606,7 @@ class FilterPlugin(base.IPlugin):
 
     @controller.call_in_gui_thread
     def _update_image(self, values=None, data=None):
-        if values is not None and self.filter_panel.update_indicators(
-            values=values, data=data
-        ):
+        if values is not None and self.filter_panel.update_indicators(values=values, data=data):
             self.proc_indicator.update_indicators()
             self.display_settings_table.on_new_frame()
             return True
@@ -665,9 +619,7 @@ class FilterPlugin(base.IPlugin):
         return None
 
     def update_indicators(self):
-        self._update_image(
-            values=self.filter_thread.get_variable("filter_parameters", None)
-        )
+        self._update_image(values=self.filter_thread.get_variable("filter_parameters", None))
 
     def update_plots(self, force=False):
         """Update plots"""
@@ -729,9 +681,9 @@ class FilterPlugin(base.IPlugin):
 
     def get_all_parameters(self):
         """Get all current filter parameter"""
-        return self.filter_thread.get_variable(
-            "filter_parameters", dictionary.Dictionary()
-        ).asdict("flat")
+        return self.filter_thread.get_variable("filter_parameters", dictionary.Dictionary()).asdict(
+            "flat"
+        )
 
 
 def find_filters(extra_dir=None):
@@ -759,9 +711,6 @@ def find_filters(extra_dir=None):
             continue
         for v in mod.__dict__.values():
             if isinstance(v, type):
-                if (
-                    issubclass(v, IFrameFilter)
-                    and getattr(v, "_class_name") is not None
-                ):
+                if issubclass(v, IFrameFilter) and v._class_name is not None:
                     filters.append(v)
     return filters

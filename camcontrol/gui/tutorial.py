@@ -1,5 +1,5 @@
-from pylablib.core.gui.widgets import param_table
 from pylablib.core.gui import QtCore, utils
+from pylablib.core.gui.widgets import param_table
 from pylablib.core.thread.controller import exsafe
 from pylablib.gui.widgets import highlighter
 
@@ -38,12 +38,8 @@ class TutorialBox(param_table.ParamTable):
         self.vs["nextch"].connect(
             exsafe(lambda: self.select_stage(self._next_chapter(self.stage[0])))
         )
-        self.vs["prevst"].connect(
-            exsafe(lambda: self.select_stage(*self._prev_stage(*self.stage)))
-        )
-        self.vs["nextst"].connect(
-            exsafe(lambda: self.select_stage(*self._next_stage(*self.stage)))
-        )
+        self.vs["prevst"].connect(exsafe(lambda: self.select_stage(*self._prev_stage(*self.stage))))
+        self.vs["nextst"].connect(exsafe(lambda: self.select_stage(*self._next_stage(*self.stage))))
         self.set_row_stretch(1, 1)
         self.setFixedSize(400, 200)
         self.main_frame = main_frame
@@ -70,28 +66,20 @@ class TutorialBox(param_table.ParamTable):
 
     def _next_chapter(self, chapter):
         chidx = self.all_chapters.index(chapter)
-        return (
-            self.all_chapters[chidx + 1] if chidx < len(self.all_chapters) - 1 else None
-        )
+        return self.all_chapters[chidx + 1] if chidx < len(self.all_chapters) - 1 else None
 
     def _prev_stage(self, chapter, stage):
         stidx = self.all_stages[chapter].index(stage)
         if stidx == 0:
             prevch = self._prev_chapter(chapter)
-            return (
-                (None, None)
-                if prevch is None
-                else (prevch, self.all_stages[prevch][-1])
-            )
+            return (None, None) if prevch is None else (prevch, self.all_stages[prevch][-1])
         return chapter, self.all_stages[chapter][stidx - 1]
 
     def _next_stage(self, chapter, stage):
         stidx = self.all_stages[chapter].index(stage)
         if stidx == len(self.all_stages[chapter]) - 1:
             nextch = self._next_chapter(chapter)
-            return (
-                (None, None) if nextch is None else (nextch, self.all_stages[nextch][0])
-            )
+            return (None, None) if nextch is None else (nextch, self.all_stages[nextch][0])
         return chapter, self.all_stages[chapter][stidx + 1]
 
     def setup_display(self, chapter, stage):
@@ -102,13 +90,9 @@ class TutorialBox(param_table.ParamTable):
         nextstch, nextst = self._next_stage(chapter, stage)
         self.v["caption"] = "   {} / {}".format(*self.get_stage(chapter, stage)[0][:2])
         self.v["hint"] = self.get_stage(chapter, stage)[0][-1]
-        self.w["prevch"].setText(
-            "<<" if prevch is None else "<<  {}".format(self.get_stage(prevch)[0][0])
-        )
+        self.w["prevch"].setText("<<" if prevch is None else f"<<  {self.get_stage(prevch)[0][0]}")
         self.set_visible("prevch", prevch is not None)
-        self.w["nextch"].setText(
-            ">>" if nextch is None else "{}  >>".format(self.get_stage(nextch)[0][0])
-        )
+        self.w["nextch"].setText(">>" if nextch is None else f"{self.get_stage(nextch)[0][0]}  >>")
         self.set_visible("nextch", nextch is not None)
         prevst_label = (
             None
@@ -119,9 +103,7 @@ class TutorialBox(param_table.ParamTable):
                 else "{} / {}".format(*self.get_stage(prevstch, prevst)[0][:2])
             )
         )
-        self.w["prevst"].setText(
-            "<" if prevst is None else "<  {}".format(prevst_label)
-        )
+        self.w["prevst"].setText("<" if prevst is None else f"<  {prevst_label}")
         self.set_visible("prevst", prevst is not None)
         nextst_label = (
             None
@@ -132,9 +114,7 @@ class TutorialBox(param_table.ParamTable):
                 else "{} / {}".format(*self.get_stage(nextstch, nextst)[0][:2])
             )
         )
-        self.w["nextst"].setText(
-            ">" if nextst is None else "{}  >".format(nextst_label)
-        )
+        self.w["nextst"].setText(">" if nextst is None else f"{nextst_label}  >")
         self.set_visible("nextst", nextst is not None)
 
     def add_layout_anchors(self, container, anchors):
@@ -144,9 +124,7 @@ class TutorialBox(param_table.ParamTable):
                 k, a = a
             else:
                 k = "r"
-            self.hframe.add_layout_anchor(
-                container, a, kind="row" if k == "r" else "element"
-            )
+            self.hframe.add_layout_anchor(container, a, kind="row" if k == "r" else "element")
         self.hframe.refresh()
 
     def select_stage(self, chapter, stage=None):
@@ -782,9 +760,7 @@ class TutorialBox(param_table.ParamTable):
             if stage in {None, "overview"}:
                 cont = self.main_frame.c["control_tabs/proc_tab"]
             elif stage == "indicator":
-                cont = self.main_frame.c[
-                    "plot_tabs/standard_frame/processing_indicator"
-                ]
+                cont = self.main_frame.c["plot_tabs/standard_frame/processing_indicator"]
             elif stage.startswith("preproc"):
                 cont = self.main_frame.c["control_tabs/proc_tab/frame_preprocessing"]
             elif stage.startswith("bgsub"):
@@ -929,9 +905,7 @@ class TutorialBox(param_table.ParamTable):
             ch = "Filters"
             cont = self.main_frame.c[self.filter_plugin, "__controller__/ctl_tab"]
             if show:
-                self.main_frame.control_tabs.set_by_name(
-                    (self.filter_plugin, "ctl_tab")
-                )
+                self.main_frame.control_tabs.set_by_name((self.filter_plugin, "ctl_tab"))
                 if stage in ["current_filter", "description", "filter_parameters"]:
                     if getattr(cont, "current_filter", None) is None:
                         cont.v["load_filter"] = True

@@ -1,9 +1,9 @@
 from pylablib.devices import DCAM
 from pylablib.thread.devices.DCAM import DCAMCameraThread
 
-from .base import ICameraDescriptor
-from ..gui import cam_gui_parameters, cam_attributes_browser
+from ..gui import cam_attributes_browser, cam_gui_parameters
 from ..gui.base_cam_ctl_gui import GenericCameraSettings_GUI, GenericCameraStatus_GUI
+from .base import ICameraDescriptor
 
 
 class DCAMOrcaCameraThread(DCAMCameraThread):
@@ -58,9 +58,7 @@ class CamAttributesBrowser(cam_attributes_browser.CamAttributesBrowser):
             self._record_attribute(
                 name, "enum", attribute, indicator=indicator, rng=attribute.ilabels
             )
-            self.add_choice_parameter(
-                name, attribute.name, attribute.ilabels, indicator=indicator
-            )
+            self.add_choice_parameter(name, attribute.name, attribute.ilabels, indicator=indicator)
 
     def _get_attribute_range(self, attribute):
         if attribute.kind in ["int", "float"]:
@@ -85,9 +83,7 @@ class Settings_GUI(GenericCameraSettings_GUI):
             "advanced",
         )
         self.add_parameter(
-            cam_gui_parameters.AttributesBrowserGUIParameter(
-                self, CamAttributesBrowser
-            ),
+            cam_gui_parameters.AttributesBrowserGUIParameter(self, CamAttributesBrowser),
             "advanced",
         )
 
@@ -108,9 +104,7 @@ class ImagEMSettings_GUI(Settings_GUI):
     def setup_settings_tables(self):
         super().setup_settings_tables()
         self.add_parameter(
-            cam_gui_parameters.IntGUIParameter(
-                self, "sensitivity", "EMCCD sensitivity", (0, 255)
-            ),
+            cam_gui_parameters.IntGUIParameter(self, "sensitivity", "EMCCD sensitivity", (0, 255)),
             "advanced",
             row=-1,
         )
@@ -142,15 +136,11 @@ class DCAMCameraDescriptor(ICameraDescriptor):
         for i in range(cam_num):
             try:
                 if verbose:
-                    print("Found DCAM camera idx={}".format(i))
+                    print(f"Found DCAM camera idx={i}")
                 with DCAM.DCAMCamera(idx=i) as cam:
                     device_info = cam.get_device_info()
                     if verbose:
-                        print(
-                            "\tVendor {}, model {}".format(
-                                device_info.vendor, device_info.model
-                            )
-                        )
+                        print(f"\tVendor {device_info.vendor}, model {device_info.model}")
                     yield cam, None
             except DCAM.DCAMError:
                 if verbose == "full":
@@ -160,10 +150,8 @@ class DCAMCameraDescriptor(ICameraDescriptor):
     def generate_description(cls, idx, cam=None, info=None):
         device_info = cam.get_device_info()
         cam_desc = cls.build_cam_desc(params={"idx": idx})
-        cam_desc["display_name"] = "{} {}".format(
-            device_info.model, device_info.serial_number
-        )
-        cam_name = "dcam_{}".format(idx)
+        cam_desc["display_name"] = f"{device_info.model} {device_info.serial_number}"
+        cam_name = f"dcam_{idx}"
         return cam_name, cam_desc
 
     def get_kind_name(self):
@@ -211,9 +199,7 @@ class DCAMImagEMCameraDescriptor(DCAMCameraDescriptor):
         return "Hamamatsu ImagEM"
 
     def make_thread(self, name):
-        return DCAMImagEMCameraThread(
-            name=name, kwargs=self.settings["params"].as_dict()
-        )
+        return DCAMImagEMCameraThread(name=name, kwargs=self.settings["params"].as_dict())
 
     def make_gui_control(self, parent):
         return ImagEMSettings_GUI(parent, cam_desc=self)

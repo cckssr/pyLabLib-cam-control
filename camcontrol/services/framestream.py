@@ -1,24 +1,26 @@
-from pylablib.misc.file_formats import cam
-from pylablib.devices.interface import camera as camera_utils
+import collections
+import os
+import time
 
+import imageio
+import numba as nb
+import numpy as np
+from pylablib.core.dataproc import image
+from pylablib.core.fileio import loadfile, location, savefile, table_stream
 from pylablib.core.thread import controller
 from pylablib.core.utils import (
     dictionary,
-    files as file_utils,
     funcargparse,
+)
+from pylablib.core.utils import (
+    files as file_utils,
+)
+from pylablib.core.utils import (
     string as string_utils,
 )
-from pylablib.core.fileio import savefile, loadfile, table_stream, location
-from pylablib.core.dataproc import image
-from pylablib.thread.stream import frameproc, table_accum, stream_manager
-
-import time
-import collections
-import numpy as np
-import imageio
-import os
-import numba as nb
-
+from pylablib.devices.interface import camera as camera_utils
+from pylablib.misc.file_formats import cam
+from pylablib.thread.stream import frameproc, stream_manager, table_accum
 
 ########## Frame processing ##########
 
@@ -26,9 +28,7 @@ import numba as nb
 class FrameProcessorThread(frameproc.BackgroundSubtractionThread):
     def setup_task(self, src, tag_in, tag_out=None):
         super().setup_task(src, tag_in, tag_out=tag_out)
-        self.subscribe_commsync(
-            self.on_control_signal, tags="processing/control", limit_queue=100
-        )
+        self.subscribe_commsync(self.on_control_signal, tags="processing/control", limit_queue=100)
         self.add_command("load_settings")
 
     def on_control_signal(self, src, tag, msg):
@@ -156,9 +156,7 @@ class ChannelAccumulator(controller.QTaskThread):
                 on_full_queue="wait",
             )
         else:
-            self.subscribe_commsync(
-                callback, srcs=src, tags=tag, dsts="any", limit_queue=10
-            )
+            self.subscribe_commsync(callback, srcs=src, tags=tag, dsts="any", limit_queue=10)
 
     def select_source(self, name):
         """Select a source with a given name"""
@@ -206,9 +204,7 @@ class ChannelAccumulator(controller.QTaskThread):
             self.reset()
         skip_count = self.skip_count if kind == "raw" else 1
         chandim = value.mi.chandim
-        frames, indices, _ = value.get_slice(
-            (-self._skip_accum) % skip_count, step=skip_count
-        )
+        frames, indices, _ = value.get_slice((-self._skip_accum) % skip_count, step=skip_count)
         self._skip_accum = (self._skip_accum + value.nframes()) % skip_count
         status_line = value.metainfo.get("status_line")
         for i, f in zip(indices, frames):
@@ -220,18 +216,14 @@ class ChannelAccumulator(controller.QTaskThread):
                 if (self.roi and self.roi_enabled)
                 else image.ROI(0, f.shape[-2 - chandim], 0, f.shape[-1 - chandim])
             )
-            sums, area = image.get_region_sum(
-                f, calc_roi.center(), calc_roi.size(), axis=(1, 2)
-            )
+            sums, area = image.get_region_sum(f, calc_roi.center(), calc_roi.size(), axis=(1, 2))
             while sums.ndim > 1:
                 sums = np.mean(sums, axis=-1)
             if status_line is not None:
                 sl_roi = camera_utils.get_status_line_roi(f, status_line)
                 sl_roi = image.ROI.intersect(sl_roi, calc_roi)
                 if sl_roi:
-                    sl_sums, sl_area = image.get_region_sum(
-                        f, sl_roi.center(), sl_roi.size()
-                    )
+                    sl_sums, sl_area = image.get_region_sum(f, sl_roi.center(), sl_roi.size())
                     sums -= sl_sums
                     area -= sl_area
             means = sums / area if area > 0 else sums
@@ -313,9 +305,7 @@ def u16to12nb2d(barr):
     for i in range(h):
         for j in range(chwidth):
             out[i, j * 3] = barr[i, j * 2] & 0xFF
-            out[i, j * 3 + 1] = ((barr[i, j * 2] >> 8) & 0x0F) | (
-                (barr[i, j * 2 + 1] & 0x0F) << 4
-            )
+            out[i, j * 3 + 1] = ((barr[i, j * 2] >> 8) & 0x0F) | ((barr[i, j * 2 + 1] & 0x0F) << 4)
             out[i, j * 3 + 2] = (barr[i, j * 2 + 1] >> 4) & 0xFF
         if width % 2 == 1:
             out[i, width - 2] = barr[i, chwidth * 2] & 0xFF
@@ -377,9 +367,7 @@ class PretriggerBuffer:
             del self.buffer[0]
         if self.strict_size and self.current_size > self.size:
             extra_frames = self.current_size - self.size
-            self.buffer[0].cut_to_size(
-                self.buffer[0].nframes() - extra_frames, from_end=True
-            )
+            self.buffer[0].cut_to_size(self.buffer[0].nframes() - extra_frames, from_end=True)
             self.current_size -= extra_frames
 
     def pop_frame_message(self):
@@ -412,9 +400,7 @@ class PretriggerBuffer:
         """Get total size of the frames in bytes"""
         return sum([m.nbytes() for m in self.buffer])
 
-    TBufferStatus = collections.namedtuple(
-        "TBufferStatus", ["frames", "skipped", "nbytes", "size"]
-    )
+    TBufferStatus = collections.namedtuple("TBufferStatus", ["frames", "skipped", "nbytes", "size"])
 
     def get_status(self):
         """
@@ -441,9 +427,7 @@ class FrameWriteError(IOError):
     def __init__(self, saved=0, kind="generic"):
         self.saved = saved
         self.kind = kind
-        super().__init__(
-            "saving frames raised {} error; only {} frames saved".format(kind, saved)
-        )
+        super().__init__(f"saving frames raised {kind} error; only {saved} frames saved")
 
 
 class FrameSaveThread(controller.QTaskThread):
@@ -484,12 +468,8 @@ class FrameSaveThread(controller.QTaskThread):
         setup_queue_ram: setup maximal saving queue RAM
     """
 
-    def setup_task(
-        self, src, tag, settings_mgr=None, frame_processor=None, garbage_collector=None
-    ):
-        self.subscribe_commsync(
-            self.receive_frames, srcs=src, tags=tag, limit_queue=500
-        )
+    def setup_task(self, src, tag, settings_mgr=None, frame_processor=None, garbage_collector=None):
+        self.subscribe_commsync(self.receive_frames, srcs=src, tags=tag, limit_queue=500)
         self.settings_mgr = settings_mgr
         self._cam_settings_time = "before"  # ``"before"`` - get full camera settings in the beginning of saving; ``"after"`` - get them in the end of saving
         self.frame_processor = frame_processor
@@ -548,9 +528,7 @@ class FrameSaveThread(controller.QTaskThread):
         self.add_command("clear_pretrigger", self.clear_pretrigger)
         self.add_job("dump_queue", self.dump_queue, self.dumping_period)
 
-    def setup_pretrigger(
-        self, size, enabled=True, preserve_frames=True, clear_on_write=True
-    ):
+    def setup_pretrigger(self, size, enabled=True, preserve_frames=True, clear_on_write=True):
         """
         Setup pretrigger.
 
@@ -568,9 +546,7 @@ class FrameSaveThread(controller.QTaskThread):
                 self._pretrigger_buffer = PretriggerBuffer(size)
                 if curr_buffer and preserve_frames:
                     while curr_buffer.has_frames():
-                        self._pretrigger_buffer.add_frame_message(
-                            curr_buffer.pop_frame_message()
-                        )
+                        self._pretrigger_buffer.add_frame_message(curr_buffer.pop_frame_message())
         else:
             self._pretrigger_buffer = None
         self._clear_pretrigger_on_write = clear_on_write
@@ -591,9 +567,7 @@ class FrameSaveThread(controller.QTaskThread):
     def _enable_garbage_collect(self, enabled):
         if self.garbage_collector:
             try:
-                garbage_collector = controller.get_controller(
-                    self.garbage_collector, sync=False
-                )
+                garbage_collector = controller.get_controller(self.garbage_collector, sync=False)
                 garbage_collector.setup(enabled=enabled)
             except controller.threadprop.NoControllerThreadError:
                 pass
@@ -641,9 +615,7 @@ class FrameSaveThread(controller.QTaskThread):
                         )
                 try:
                     self._write_frames(flat_chunk, append=append)
-                    self._write_frame_info(
-                        new_chunk, self._get_frame_info_path(), append=append
-                    )
+                    self._write_frame_info(new_chunk, self._get_frame_info_path(), append=append)
                 except FrameWriteError as err:
                     self.v["saved"] = err.saved
                     self.signal_error(err.kind)
@@ -690,9 +662,7 @@ class FrameSaveThread(controller.QTaskThread):
             self.update_status("error", (kind, desc))
 
     @staticmethod
-    def build_path(
-        base, path_kind="pfx", default_name="frames", subpath=None, idx=None, ext=None
-    ):
+    def build_path(base, path_kind="pfx", default_name="frames", subpath=None, idx=None, ext=None):
         """
         Make a data path from the base path depending on its kind.
 
@@ -707,7 +677,7 @@ class FrameSaveThread(controller.QTaskThread):
         """
         funcargparse.check_parameter_range(path_kind, "path_kind", ["pfx", "folder"])
         bname, bext = os.path.splitext(base)
-        idx_sfx = "" if idx is None else "_{:04d}".format(idx)
+        idx_sfx = "" if idx is None else f"_{idx:04d}"
         if path_kind == "pfx":
             loc = location.PrefixedFileSystemDataLocation(bname + idx_sfx + bext)
         else:
@@ -811,8 +781,7 @@ class FrameSaveThread(controller.QTaskThread):
         """Collect full settings dictionary and save it to the disk"""
         if self._cam_settings_time == "before":
             settings = (
-                self._get_manager_settings(exclude=["cam/settings"])
-                or dictionary.Dictionary()
+                self._get_manager_settings(exclude=["cam/settings"]) or dictionary.Dictionary()
             )
         else:
             settings = (
@@ -855,9 +824,7 @@ class FrameSaveThread(controller.QTaskThread):
     def _get_snapshot_background_parameters(self):
         if self.frame_processor:
             try:
-                frame_processor = controller.get_controller(
-                    self.frame_processor, sync=False
-                )
+                frame_processor = controller.get_controller(self.frame_processor, sync=False)
                 return frame_processor.get_background_to_save(), frame_processor.v[
                     "snapshot/parameters"
                 ]
@@ -906,9 +873,7 @@ class FrameSaveThread(controller.QTaskThread):
                     0,
                     self._first_frame_idx or 0,
                     0,
-                    string_utils.escape_string(
-                        "Recording started", location="parameter"
-                    ),
+                    string_utils.escape_string("Recording started", location="parameter"),
                 )
             with open(path, "a") as f:
                 t = time.time()
@@ -1063,9 +1028,7 @@ class FrameSaveThread(controller.QTaskThread):
                     if f is not None:
                         f.close()
         elif self.format in ["tiff", "bigtiff"]:
-            frames = [
-                f.astype("float32") if f.dtype == "float64" else f for f in frames
-            ]
+            frames = [f.astype("float32") if f.dtype == "float64" else f for f in frames]
             if self.filesplit is None:
                 path = self._make_path()
                 self._update_file_save(path)
@@ -1185,7 +1148,7 @@ class FrameSaveThread(controller.QTaskThread):
         self.v["batch_size"] = batch_size
         self.append = append or (filesplit is not None)
         if format not in ["cam", "raw", "tiff", "bigtiff"]:
-            raise ValueError("unrecognized format: {}".format(format))
+            raise ValueError(f"unrecognized format: {format}")
         self.format = format
         self.format_parameters = format_parameters or {}
         self.filesplit = filesplit
@@ -1306,7 +1269,5 @@ class FrameSaveThread(controller.QTaskThread):
         if not scheduled and self._pretrigger_buffer is not None:
             self._pretrigger_buffer.add_frame_message(msg)
             self.v["pretrigger_status"] = (
-                self._pretrigger_buffer.get_status()
-                if self._pretrigger_buffer
-                else None
+                self._pretrigger_buffer.get_status() if self._pretrigger_buffer else None
             )

@@ -8,9 +8,9 @@ This class can be contained in any ``.py`` file withing this folder (``plugins/f
 See :class:`base.IFrameFilter` and filter examples in ``base.py`` and ``builtin.py`` for further info.
 """
 
-from . import base
-
 import numpy as np
+
+from . import base
 
 
 class FrameRescaleFilter(base.ISingleFrameFilter):
@@ -42,12 +42,8 @@ class FrameCutFilter(base.ISingleFrameFilter):
         super().setup()
         self.add_parameter("x0", label="X start", kind="int", limit=(0, None))
         self.add_parameter("y0", label="Y start", kind="int", limit=(0, None))
-        self.add_parameter(
-            "xsize", label="X size", kind="int", limit=(1, None), default=1
-        )
-        self.add_parameter(
-            "ysize", label="Y size", kind="int", limit=(1, None), default=1
-        )
+        self.add_parameter("xsize", label="X size", kind="int", limit=(1, None), default=1)
+        self.add_parameter("ysize", label="Y size", kind="int", limit=(1, None), default=1)
 
     def process_frame(self, frame):
         x0 = min(self.p["x0"], frame.shape[1] - 1)
@@ -70,9 +66,7 @@ class BlockAverageFilter(base.IFrameFilter):
         self.add_parameter(
             "length", label="Number of frames", kind="int", limit=(1, None), default=1
         )
-        self.add_parameter(
-            "buff_accum", label="Accumulated frames", kind="int", indicator=True
-        )
+        self.add_parameter("buff_accum", label="Accumulated frames", kind="int", indicator=True)
         self.buffer = []
         self._bufflen = 0
         self._latest_frame = None
@@ -84,9 +78,7 @@ class BlockAverageFilter(base.IFrameFilter):
         self._bufflen = max(self._bufflen, min(len(self.buffer), self.p["length"]))
         if len(self.buffer) > self.p["length"]:
             nl = len(self.buffer) // self.p["length"]
-            last_buffer = self.buffer[
-                (nl - 1) * self.p["length"] : nl * self.p["length"]
-            ]
+            last_buffer = self.buffer[(nl - 1) * self.p["length"] : nl * self.p["length"]]
             self.buffer = self.buffer[nl * self.p["length"] :]
             self._latest_frame = np.mean(last_buffer, axis=0)
         self.p["buff_accum"] = len(self.buffer)
@@ -116,9 +108,7 @@ class MovingAverageFilter(base.IMultiFrameFilter):
         self.add_parameter(
             "length", label="Number of frames", kind="int", limit=(1, None), default=20
         )
-        self.add_parameter(
-            "period", label="Frame step", kind="int", limit=(1, None), default=1
-        )
+        self.add_parameter("period", label="Frame step", kind="int", limit=(1, None), default=1)
 
     def set_parameter(self, name, value):
         super().set_parameter(name, value)
@@ -154,9 +144,7 @@ class MovingAverageSubtractionFilter(base.IMultiFrameFilter):
         self.add_parameter(
             "length", label="Number of frames", kind="int", limit=(1, None), default=20
         )
-        self.add_parameter(
-            "period", label="Frame step", kind="int", limit=(1, None), default=1
-        )
+        self.add_parameter("period", label="Frame step", kind="int", limit=(1, None), default=1)
 
     def set_parameter(self, name, value):
         super().set_parameter(name, value)

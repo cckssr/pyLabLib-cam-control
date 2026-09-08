@@ -2,9 +2,9 @@
 Module contained basic built-in filters.
 """
 
+import numba as nb
 import numpy as np
 import scipy.ndimage
-import numba as nb
 
 from . import base
 
@@ -40,12 +40,8 @@ class FFTBandpassFilter(base.ISingleFrameFilter):
 
     def setup(self):
         super().setup()
-        self.add_parameter(
-            "minwidth", label="Minimal width", limit=(0, None), default=2
-        )
-        self.add_parameter(
-            "maxwidth", label="Maximal width", limit=(0, None), default=10
-        )
+        self.add_parameter("minwidth", label="Minimal width", limit=(0, None), default=2)
+        self.add_parameter("maxwidth", label="Maximal width", limit=(0, None), default=10)
         self.add_parameter(
             "filter_kind",
             label="Filter kind",
@@ -86,8 +82,7 @@ class FFTBandpassFilter(base.ISingleFrameFilter):
         rsq = xfm**2 + yfm**2
         if self.p["filter_kind"] == "hard":
             self.mask = (
-                (rsq * self.p["maxwidth"] ** 2 > 1)
-                & (rsq * self.p["minwidth"] ** 2 < 1)
+                (rsq * self.p["maxwidth"] ** 2 > 1) & (rsq * self.p["minwidth"] ** 2 < 1)
             ).astype("float")
         else:
             self.mask = np.exp(-rsq * self.p["minwidth"] ** 2 / 2.0) - np.exp(
@@ -115,15 +110,11 @@ class FFTBandpassFilter(base.ISingleFrameFilter):
             self.select_plotter("frame")
             return self._apply_mask(frame)
         else:
-            self.select_plotter(
-                "psd" if self.p["show_info"] in ["psd", "filt_psd"] else "filt"
-            )
+            self.select_plotter("psd" if self.p["show_info"] in ["psd", "filt_psd"] else "filt")
             return self._get_aux_info(frame)
 
 
-_movavg_per = (
-    4  # "manual" loop unrolling (parallel mode is unstable, shouldn't be used)
-)
+_movavg_per = 4  # "manual" loop unrolling (parallel mode is unstable, shouldn't be used)
 
 
 @nb.njit(
@@ -161,9 +152,7 @@ class FastMovingAverageFilter(base.IRingMultiFrameFilter):
         self.add_parameter(
             "length", label="Number of frames", kind="int", limit=(1, None), default=20
         )
-        self.add_parameter(
-            "period", label="Frame step", kind="int", limit=(1, None), default=1
-        )
+        self.add_parameter("period", label="Frame step", kind="int", limit=(1, None), default=1)
 
     def set_parameter(self, name, value):
         super().set_parameter(name, value)
@@ -201,9 +190,7 @@ class MovingAccumulatorFilter(base.IMultiFrameFilter):
         self.add_parameter(
             "length", label="Number of frames", kind="int", limit=(1, None), default=20
         )
-        self.add_parameter(
-            "period", label="Frame step", kind="int", limit=(1, None), default=1
-        )
+        self.add_parameter("period", label="Frame step", kind="int", limit=(1, None), default=1)
         self.add_parameter(
             "kind",
             label="Combination method",
@@ -276,9 +263,7 @@ class FastMovingAverageSubtractionFilter(base.IRingMultiFrameFilter):
         self.add_parameter(
             "length", label="Number of frames", kind="int", limit=(1, None), default=20
         )
-        self.add_parameter(
-            "period", label="Frame step", kind="int", limit=(1, None), default=1
-        )
+        self.add_parameter("period", label="Frame step", kind="int", limit=(1, None), default=1)
 
     def set_parameter(self, name, value):
         super().set_parameter(name, value)
@@ -317,9 +302,7 @@ class TimeMapFilter(base.IMultiFrameFilter):
         self.add_parameter(
             "length", label="Number of frames", kind="int", limit=(1, None), default=20
         )
-        self.add_parameter(
-            "period", label="Frame step", kind="int", limit=(1, None), default=1
-        )
+        self.add_parameter("period", label="Frame step", kind="int", limit=(1, None), default=1)
         self.add_parameter(
             "orientation",
             label="Orientation",
@@ -328,9 +311,7 @@ class TimeMapFilter(base.IMultiFrameFilter):
         )
         self.add_parameter("position", label="Position", kind="int", limit=(0, None))
         self.add_parameter("track_lines", label="Use plot lines", kind="check")
-        self.add_parameter(
-            "width", label="Width", kind="int", limit=(1, None), default=10
-        )
+        self.add_parameter("width", label="Width", kind="int", limit=(1, None), default=10)
         self.add_parameter(
             "show_map_info",
             label="Showing",
@@ -387,9 +368,7 @@ class TimeMapFilter(base.IMultiFrameFilter):
         self.change_rectangle("selection", visible=False)
         self.select_plotter("map")
         axis, rs, cs = self._get_region(buffer[0].shape)
-        img = np.full(
-            (self.p["length"], buffer[0].shape[1 - axis]) + buffer[-1].shape[2:], np.nan
-        )
+        img = np.full((self.p["length"], buffer[0].shape[1 - axis]) + buffer[-1].shape[2:], np.nan)
         img[: len(buffer)] = np.mean(
             np.array(buffer)[:, rs[0] : rs[1], cs[0] : cs[1]], axis=axis + 1
         )
@@ -403,18 +382,14 @@ class DifferenceMatrixFilter(base.IMultiFrameFilter):
 
     _class_name = "diff_matrix"
     _class_caption = "Difference matrix"
-    _class_description = (
-        "Plots a 2D map showing RMS differences between different frames."
-    )
+    _class_description = "Plots a 2D map showing RMS differences between different frames."
 
     def setup(self):
         super().setup(process_incomplete=True)
         self.add_parameter(
             "length", label="Number of frames", kind="int", limit=(2, None), default=20
         )
-        self.add_parameter(
-            "period", label="Frame step", kind="int", limit=(1, None), default=1
-        )
+        self.add_parameter("period", label="Frame step", kind="int", limit=(1, None), default=1)
 
     def set_parameter(self, name, value):
         super().set_parameter(name, value)

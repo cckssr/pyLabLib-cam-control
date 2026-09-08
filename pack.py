@@ -1,21 +1,22 @@
-from pylablib.core.utils import (
-    files as file_utils,
-    string as string_utils,
-    module as module_utils,
-)
-
 import argparse
 import os
-import sys
-import re
 import subprocess
+import sys
 
-import setuptools  # noqa: F401  (must be imported before distutils on Python 3.12+, see below)
 import distutils.ccompiler  # setuptools installs a compatibility shim for the stdlib removal
+import setuptools  # noqa: F401  (must be imported before distutils on Python 3.12+, see below)
+from pylablib.core.utils import (
+    files as file_utils,
+)
+from pylablib.core.utils import (
+    module as module_utils,
+)
+from pylablib.core.utils import (
+    string as string_utils,
+)
 
 sys.path.append(".")
 from camcontrol import version
-
 
 ### Setup comman line arguments
 parser = argparse.ArgumentParser()
@@ -43,12 +44,8 @@ parser.add_argument(
     default="",
     help="list of plugins to add in addition to the standard ones",
 )
-parser.add_argument(
-    "--advanced-plugins", action="store_true", help="include all advanced plugins"
-)
-parser.add_argument(
-    "--noarchive", action="store_true", help="skip creating the zip file"
-)
+parser.add_argument("--advanced-plugins", action="store_true", help="include all advanced plugins")
+parser.add_argument("--noarchive", action="store_true", help="skip creating the zip file")
 parser.add_argument("--nodocs", action="store_true", help="skip generating doc files")
 parser.add_argument("--git", action="store_true", help="set up Git repo")
 parser.add_argument(
@@ -160,9 +157,7 @@ def copy_control(dst):
 
 def copy_docs(dst):
     subprocess.call(["python.exe", "make-sphinx.py", "-c"], cwd="docs")
-    file_utils.retry_copy_dir(
-        os.path.join("docs", "_build", "html"), os.path.join(dst, "docs")
-    )
+    file_utils.retry_copy_dir(os.path.join("docs", "_build", "html"), os.path.join(dst, "docs"))
 
 
 def make_bat(dst):
@@ -233,9 +228,7 @@ if clargs.git and clargs.force and os.path.exists(clargs.dst):
     print("committing existing changes")
     setup_repo(os.path.join(clargs.dst, "cam-control"), "Pre-update changes")
 print("preparing destination path {}".format(clargs.dst))
-prepare_dst(
-    clargs.dst, force=clargs.force, full_force=clargs.full_force, git=clargs.git
-)
+prepare_dst(clargs.dst, force=clargs.force, full_force=clargs.full_force, git=clargs.git)
 print("copying interpreter")
 copy_interpreter(clargs.dst, interpreter=clargs.interpreter)
 print("copying pylablib")

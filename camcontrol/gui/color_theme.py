@@ -1,8 +1,8 @@
+import re
+
+import qdarkstyle
 from pylablib.core.gui import is_pyside2
 from pylablib.core.utils import funcargparse
-import qdarkstyle
-
-import re
 
 
 def load_style(style="light"):
@@ -17,9 +17,7 @@ def load_style(style="light"):
     palette = qdarkstyle.DarkPalette if style == "dark" else qdarkstyle.LightPalette
     accent_color = "#406482" if style == "dark" else "#94c1e0"
     accent_hover_color = "#254f73" if style == "dark" else "#5a96bf"
-    checked_style = "\n\nQPushButton:checked {{background-color: {};}}\n\nQPushButton:checked:hover {{background-color: {};}}".format(
-        accent_color, accent_hover_color
-    )
+    checked_style = f"\n\nQPushButton:checked {{background-color: {accent_color};}}\n\nQPushButton:checked:hover {{background-color: {accent_hover_color};}}"
     try:
         stylesheet = qdarkstyle.load_stylesheet(
             qt_api="pyside2" if is_pyside2 else "pyqt5", palette=palette

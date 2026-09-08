@@ -85,7 +85,7 @@ class IFrameFilter:
                 in this case, only ``"text"``, ``"float"``, or ``"int"`` kinds are allowed
         """
         if name in self.p:
-            raise ValueError("parameter {} is already defined".format(name))
+            raise ValueError(f"parameter {name} is already defined")
         allowed_kinds = (
             ["text", "float", "int", "virtual"]
             if indicator
@@ -93,9 +93,7 @@ class IFrameFilter:
         )
         if kind not in allowed_kinds:
             raise ValueError(
-                "unrecognized parameter kind: {}; allowed parameters are {}".format(
-                    kind, allowed_kinds
-                )
+                f"unrecognized parameter kind: {kind}; allowed parameters are {allowed_kinds}"
             )
         if label is None:
             label = name
@@ -166,8 +164,7 @@ class IFrameFilter:
         By default, return a dictionary of all values returned by :meth:`get_parameter`.
         """
         return {
-            p["name"]: self.get_parameter(p["name"])
-            for p in self.description["gui/parameters"]
+            p["name"]: self.get_parameter(p["name"]) for p in self.description["gui/parameters"]
         }
 
     def get_parameter(self, name):
@@ -243,9 +240,7 @@ class ISingleFrameFilter(IFrameFilter):
         self._latest_frame = None
         if multichannel not in ["split", "average", "keep"]:
             raise ValueError(
-                "unrecognzied multichannel option: {}; valid options are 'split', 'average', and 'keep'".format(
-                    multichannel
-                )
+                f"unrecognzied multichannel option: {multichannel}; valid options are 'split', 'average', and 'keep'"
             )
         self._multichannel = multichannel
 
@@ -338,15 +333,13 @@ class IMultiFrameFilter(IFrameFilter):
         if self.buffer and self.buffer[0].shape != frames.shape[1:]:
             self.buffer = []
         start = self.buffer_step - self._buffer_step_part - 1
-        self._buffer_step_part = (
-            len(frames) + self._buffer_step_part
-        ) % self.buffer_step
+        self._buffer_step_part = (len(frames) + self._buffer_step_part) % self.buffer_step
         frames = frames[start :: self.buffer_step]
         self.buffer += list(frames)
         if len(self.buffer) > self.buffer_size:
             del self.buffer[: len(self.buffer) - self.buffer_size]
         if "buff_accum" in self.p:
-            self.p["buff_accum"] = "{} / {}".format(len(self.buffer), self.buffer_size)
+            self.p["buff_accum"] = f"{len(self.buffer)} / {self.buffer_size}"
 
     def generate_frame(self):
         return (
@@ -438,9 +431,7 @@ class IRingMultiFrameFilter(IFrameFilter):
         if self.buffer is None or self.buffer.shape[1:] != frames.shape[1:]:
             self.reshape_buffer(frame_shape=frames.shape[1:], frame_dtype=frames.dtype)
         start = self.buffer_step - self._buffer_step_part - 1
-        self._buffer_step_part = (
-            len(frames) + self._buffer_step_part
-        ) % self.buffer_step
+        self._buffer_step_part = (len(frames) + self._buffer_step_part) % self.buffer_step
         frames = frames[start :: self.buffer_step]
         if len(frames) >= len(self.buffer):
             self.buffer[:] = frames[-len(self.buffer) :]
@@ -456,8 +447,8 @@ class IRingMultiFrameFilter(IFrameFilter):
             self.buffer[self.end_pos : self.end_pos + len(frames)] = frames
             self.end_pos += len(frames)
         if "buff_accum" in self.p:
-            self.p["buff_accum"] = "{} / {}".format(
-                len(self.buffer) if self.filled else self.end_pos, len(self.buffer)
+            self.p["buff_accum"] = (
+                f"{len(self.buffer) if self.filled else self.end_pos} / {len(self.buffer)}"
             )
 
     def generate_frame(self):
@@ -481,6 +472,4 @@ class IRingMultiFrameFilter(IFrameFilter):
         If the buffer is full, then chronologically frames go from ``start`` to ``len(buffer)``,
         and then continue from ``0`` to ``start``; otherwise, they go from ``0`` till ``filled``.
         """
-        return buffer[
-            (start + filled - 1) % len(buffer)
-        ]  # take the most recent valid frame
+        return buffer[(start + filled - 1) % len(buffer)]  # take the most recent valid frame

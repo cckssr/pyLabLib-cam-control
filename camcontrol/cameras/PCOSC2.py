@@ -1,9 +1,9 @@
 from pylablib.devices import PCO
 from pylablib.thread.devices.PCO import PCOSC2CameraThread
 
-from .base import ICameraDescriptor
 from ..gui import cam_gui_parameters
 from ..gui.base_cam_ctl_gui import GenericCameraSettings_GUI, GenericCameraStatus_GUI
+from .base import ICameraDescriptor
 
 
 class BasicPCOSC2CameraThread(PCOSC2CameraThread):
@@ -21,9 +21,7 @@ class FastScanBoolGUIParameter(cam_gui_parameters.BoolGUIParameter):
     """Fast scan parameter"""
 
     def __init__(self, settings):
-        super().__init__(
-            settings, "fast_scan", "Fast scan", default=True, cam_name="pixel_rate"
-        )
+        super().__init__(settings, "fast_scan", "Fast scan", default=True, cam_name="pixel_rate")
 
     def to_camera(self, gui_value):
         return None if gui_value else 0
@@ -78,9 +76,7 @@ class Status_GUI(GenericCameraStatus_GUI):
             self.v["buffer_overruns"] = (
                 str(buffer_overruns) if buffer_overruns is not None else "N/A"
             )
-            self.w["buffer_overruns"].setStyleSheet(
-                "font-weight: bold" if buffer_overruns else ""
-            )
+            self.w["buffer_overruns"].setStyleSheet("font-weight: bold" if buffer_overruns else "")
 
 
 class PCOCameraDescriptor(ICameraDescriptor):
@@ -109,14 +105,12 @@ class PCOCameraDescriptor(ICameraDescriptor):
         for i in range(cam_num):
             try:
                 if verbose:
-                    print("Found PCO camera idx={}".format(i))
+                    print(f"Found PCO camera idx={i}")
                 with PCO.PCOSC2Camera(idx=i) as cam:
                     device_info = cam.get_device_info()
                     if verbose:
                         print(
-                            "\tModel {}, serial number {}".format(
-                                device_info.model, device_info.serial_number
-                            )
+                            f"\tModel {device_info.model}, serial number {device_info.serial_number}"
                         )
                     yield cam, None
             except PCO.PCOSC2Error:
@@ -127,10 +121,8 @@ class PCOCameraDescriptor(ICameraDescriptor):
     def generate_description(cls, idx, cam=None, info=None):
         device_info = cam.get_device_info()
         cam_desc = cls.build_cam_desc(params={"idx": idx})
-        cam_desc["display_name"] = "{} {}".format(
-            device_info.model, device_info.serial_number
-        )
-        cam_name = "pcosc2_{}".format(idx)
+        cam_desc["display_name"] = f"{device_info.model} {device_info.serial_number}"
+        cam_name = f"pcosc2_{idx}"
         return cam_name, cam_desc
 
     def get_kind_name(self):
@@ -143,9 +135,7 @@ class PCOCameraDescriptor(ICameraDescriptor):
         return settings
 
     def make_thread(self, name):
-        return BasicPCOSC2CameraThread(
-            name=name, kwargs=self.settings["params"].as_dict()
-        )
+        return BasicPCOSC2CameraThread(name=name, kwargs=self.settings["params"].as_dict())
 
     def make_gui_control(self, parent):
         return Settings_GUI(parent, cam_desc=self)

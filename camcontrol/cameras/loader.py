@@ -1,10 +1,11 @@
-from .base import ICameraDescriptor
-
-from pylablib.core.utils import files as file_utils, string as string_utils
-
+import importlib
 import os
 import sys
-import importlib
+
+from pylablib.core.utils import files as file_utils
+from pylablib.core.utils import string as string_utils
+
+from .base import ICameraDescriptor
 
 folder = os.path.dirname(__file__)
 root_module_name = __name__.rsplit(".", maxsplit=1)[0]
@@ -25,9 +26,7 @@ def find_camera_descriptors():
                 os.path.splitext(f)[0].replace("\\", ".").replace("/", "."),
             )
             if module_name not in sys.modules:
-                spec = importlib.util.spec_from_file_location(
-                    module_name, os.path.join(folder, f)
-                )
+                spec = importlib.util.spec_from_file_location(module_name, os.path.join(folder, f))
                 mod = importlib.util.module_from_spec(spec)
                 try:
                     spec.loader.exec_module(mod)
@@ -36,7 +35,7 @@ def find_camera_descriptors():
                     # available on specific platforms (e.g. PCO's SC2 extension is Windows-only).
                     # Skip modules that fail to import instead of taking down the whole registry.
                     print(
-                        "Could not load camera module {}: {}".format(module_name, e),
+                        f"Could not load camera module {module_name}: {e}",
                         file=sys.stderr,
                     )
                     continue

@@ -1,7 +1,7 @@
+import time
+
 from pylablib.core.gui.widgets import container, param_table
 from pylablib.core.thread import controller
-
-import time
 
 
 class DisplaySettings_GUI(container.QGroupBoxContainer):
@@ -22,16 +22,12 @@ class DisplaySettings_GUI(container.QGroupBoxContainer):
         self.setFixedWidth(200)
         self.slowdown_thread = slowdown_thread
         self.frame_slowdown = (
-            controller.sync_controller(self.slowdown_thread)
-            if self.slowdown_thread
-            else None
+            controller.sync_controller(self.slowdown_thread) if self.slowdown_thread else None
         )
         # Setup GUI
         self.params = self.add_child("params", param_table.ParamTable(self))
         self.params.setup(add_indicator=False)
-        self.params.add_decoration_label(
-            "Display update period:", location=("next", 0, 1, 2)
-        )
+        self.params.add_decoration_label("Display update period:", location=("next", 0, 1, 2))
         self.params.add_num_edit(
             "display_update_period",
             formatter=".3f",
@@ -39,9 +35,7 @@ class DisplaySettings_GUI(container.QGroupBoxContainer):
             value=0.05,
             location=(-1, 2),
         )
-        self.params.add_num_label(
-            "display_fps", formatter=".3f", label="Display FPS:", value=0
-        )
+        self.params.add_num_label("display_fps", formatter=".3f", label="Display FPS:", value=0)
         self.params.add_text_label("slowdown_enabled", location=(-1, 2, 1, "end"))
 
         def set_display_period(period):
@@ -66,9 +60,7 @@ class DisplaySettings_GUI(container.QGroupBoxContainer):
         if self._last_fps_refresh + self._fps_update_period > t:
             self._last_fps_cnt += 1
         else:
-            self.v["display_fps"] = (self._last_fps_cnt + 1.0) / (
-                t - self._last_fps_refresh
-            )
+            self.v["display_fps"] = (self._last_fps_cnt + 1.0) / (t - self._last_fps_refresh)
             self._last_fps_refresh = t
             self._last_fps_cnt = 0
 

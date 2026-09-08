@@ -14,9 +14,7 @@ class PlotControl_GUI(container.QGroupBoxContainer):
         # Setup threads
         self.channel_accumulator_thread = channel_accumulator_thread
         self.settings = settings or {}
-        self.channel_accumulator = controller.sync_controller(
-            self.channel_accumulator_thread
-        )
+        self.channel_accumulator = controller.sync_controller(self.channel_accumulator_thread)
 
         # Setup plot window
         self.plot_window = plot_window
@@ -27,9 +25,9 @@ class PlotControl_GUI(container.QGroupBoxContainer):
         # Setup control table
         self.params = self.add_child("params", param_table.ParamTable(self))
         self.params.setup(add_indicator=False)
-        self.params.add_toggle_button(
-            "enable", "Enable"
-        ).get_value_changed_signal().connect(self.enable)
+        self.params.add_toggle_button("enable", "Enable").get_value_changed_signal().connect(
+            self.enable
+        )
         self.params.add_combo_box(
             "source",
             options=["Display frame mean", "Raw frame mean"],
@@ -44,9 +42,9 @@ class PlotControl_GUI(container.QGroupBoxContainer):
             formatter=("int"),
             label="Calculate every: ",
         )
-        self.params.add_check_box(
-            "roi/enable", "Use ROI"
-        ).get_value_changed_signal().connect(self.setup_roi)
+        self.params.add_check_box("roi/enable", "Use ROI").get_value_changed_signal().connect(
+            self.setup_roi
+        )
         with self.params.using_new_sublayout("roi", "grid"):
             self.params.add_num_edit(
                 "roi/center/x",
@@ -76,9 +74,9 @@ class PlotControl_GUI(container.QGroupBoxContainer):
                 formatter="int",
                 location=(-1, 2),
             )
-        self.params.add_button(
-            "roi/reset", "Reset ROI"
-        ).get_value_changed_signal().connect(self.reset_roi)
+        self.params.add_button("roi/reset", "Reset ROI").get_value_changed_signal().connect(
+            self.reset_roi
+        )
         for n in ["center/x", "center/y", "size/x", "size/y"]:
             self.params.w["roi/" + n].setMaximumWidth(60)
             self.params.vs["roi/" + n].connect(self.setup_roi)
@@ -91,9 +89,7 @@ class PlotControl_GUI(container.QGroupBoxContainer):
             formatter=("int"),
             label="Display last: ",
         )
-        self.params.add_button(
-            "reset_history", "Reset history"
-        ).get_value_changed_signal().connect(
+        self.params.add_button("reset_history", "Reset history").get_value_changed_signal().connect(
             lambda: self.channel_accumulator.ca.reset()
         )
         self.params.add_padding("horizontal", location=(0, "next"))
@@ -184,9 +180,7 @@ class PlotControl_GUI(container.QGroupBoxContainer):
         labels = labels or [None] * len(channels)
         enabled = enabled or [True] * len(channels)
         if self.plot_window.plotItem.legend:
-            self.plot_window.plotItem.legend.scene().removeItem(
-                self.plot_window.plotItem.legend
-            )
+            self.plot_window.plotItem.legend.scene().removeItem(self.plot_window.plotItem.legend)
             self.plot_window.plotItem.legend = None
         for ch in self.plot_lines:
             self.plot_window.removeItem(self.plot_lines[ch])

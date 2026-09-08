@@ -13,18 +13,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import argparse
+import datetime
 import os
 import sys
-import argparse
+import threading
+import time
 
-from pylablib.core.utils import dictionary, general as general_utils
+import pylablib
 from pylablib.core.fileio.loadfile import load_dict
 from pylablib.core.fileio.savefile import save_dict
-import pylablib
-
-import time
-import threading
-import datetime
+from pylablib.core.utils import dictionary
+from pylablib.core.utils import general as general_utils
 
 from camcontrol.cameras.loader import camera_descriptors
 
@@ -40,9 +40,7 @@ class StreamLogger(general_utils.StreamFileLogger):
     def write_header(self, f):
         f.write("\n\n" + "-" * 50)
         f.write(
-            "\nStarting {} {:on %Y/%m/%d at %H:%M:%S}\n\n".format(
-                os.path.split(sys.argv[0])[1], self.start_time
-            )
+            f"\nStarting {os.path.split(sys.argv[0])[1]} {self.start_time:on %Y/%m/%d at %H:%M:%S}\n\n"
         )
 
 
@@ -60,10 +58,7 @@ def detect_all(verbose=False):
     root_descriptors = [d for d in camera_descriptors.values() if d._expands is None]
     for c in root_descriptors:
         cams.update(
-            c.detect(
-                verbose=verbose, camera_descriptors=list(camera_descriptors.values())
-            )
-            or {}
+            c.detect(verbose=verbose, camera_descriptors=list(camera_descriptors.values())) or {}
         )
     if cams:
         for c in cams:
@@ -97,7 +92,7 @@ def update_settings_file(
         if do_save:
             save_dict(settings, cfg_path)
             if verbose:
-                print("Successfully generated config file {}".format(cfg_path))
+                print(f"Successfully generated config file {cfg_path}")
         else:
             return
     else:

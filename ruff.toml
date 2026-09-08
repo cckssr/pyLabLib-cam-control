@@ -9,7 +9,16 @@ select = ["E", "F", "W", "I", "UP", "B"]
 ignore = [
     "E501",  # line length handled by formatter
     "E402",  # control.py/detect.py/splash.py chdir + sys.path.append before imports is intentional
+    # Pre-existing findings from before the ruff.toml was added (2026-09), not touched during the
+    # Python 3.14 modernization pass to keep that diff mechanical. Real issues, not false
+    # positives -- worth a dedicated cleanup pass, each needs per-call-site judgment:
+    "B904",  # raise-without-from-inside-except (10 sites)
+    "B905",  # zip-without-explicit-strict (9 sites)
+    "E741",  # ambiguous-variable-name, e.g. `l` (4 sites)
+    "E731",  # lambda-assignment (1 site)
+    "UP028",  # yield-in-for-loop, could be yield from (1 site)
 ]
 
 [lint.per-file-ignores]
 "pack.py" = ["UP"]  # touches distutils/Windows build tooling, keep literal
+"**/__init__.py" = ["F401"]  # these re-export their package's public API

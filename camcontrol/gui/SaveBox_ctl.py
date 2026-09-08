@@ -1,12 +1,13 @@
-from pylablib.core.thread import controller
-from pylablib.core.gui.widgets import container, param_table
-from pylablib.core.utils import files as file_utils, general
-
-from pylablib.core.gui import QtWidgets, QtCore, QtGui, qtkwargs, utils as gui_utils
-
-import os
 import datetime
+import os
 import re
+
+from pylablib.core.gui import QtCore, QtGui, QtWidgets, qtkwargs
+from pylablib.core.gui import utils as gui_utils
+from pylablib.core.gui.widgets import container, param_table
+from pylablib.core.thread import controller
+from pylablib.core.utils import files as file_utils
+from pylablib.core.utils import general
 
 
 class MessageLogWindow(container.QWidgetContainer):
@@ -20,9 +21,7 @@ class MessageLogWindow(container.QWidgetContainer):
         self.params = self.add_child("params", param_table.ParamTable(self))
         self.params.setup(add_indicator=False)
         self.params.add_decoration_label("Message", location=(0, 0, 1, 1))
-        self.params.add_text_edit(
-            "event_msg", value="", multiline=True, location=(1, 0, 1, 1)
-        )
+        self.params.add_text_edit("event_msg", value="", multiline=True, location=(1, 0, 1, 1))
         with self.params.using_new_sublayout("button", "hbox", location=(2, 0, 1, 2)):
             self.params.add_button("log_event", "Record")
             self.params.vs["log_event"].connect(self._on_log_event)
@@ -53,9 +52,7 @@ class MessageLogWindow(container.QWidgetContainer):
         for r in self._log_results:
             if r.is_call_done():
                 v = r.get_value()[1]
-                vstr = "[{:%Y/%M/%d %H:%M:%S}]  {:.2f}\n{}\n\n".format(
-                    datetime.datetime.fromtimestamp(v[0]), v[1], v[2]
-                )
+                vstr = f"[{datetime.datetime.fromtimestamp(v[0]):%Y/%M/%d %H:%M:%S}]  {v[1]:.2f}\n{v[2]}\n\n"
                 self.v["recorded_events"] = self.v["recorded_events"] + vstr
                 self.w["recorded_events"].moveCursor(QtGui.QTextCursor.End)
             else:
@@ -149,9 +146,7 @@ def _get_error_message(err, long=False):
         return _error_description[err[0]][1 if long else 0]
     if err[0] == "write_os_error":
         return (
-            "Writing produced an OS error '{}'. Most likely the path is invalid, the location is read-only, or the drive is full.".format(
-                err[1]
-            )
+            f"Writing produced an OS error '{err[1]}'. Most likely the path is invalid, the location is read-only, or the drive is full."
             if long
             else "Write error"
         )
@@ -174,18 +169,14 @@ class SaveBox_GUI(container.QGroupBoxContainer):
         self.popup_on_missing_frames = self.cam_ctl.settings.get(
             "interface/popup_on_missing_frames", True
         )
-        self.expandable_edits = self.cam_ctl.settings.get(
-            "interface/expandable_edits", True
-        )
+        self.expandable_edits = self.cam_ctl.settings.get("interface/expandable_edits", True)
         self.compact_interface = self.cam_ctl.settings.get("interface/compact", False)
 
         self.params = self.add_child("params", param_table.ParamTable(self))
         self.params.setup(add_indicator=False)
         # Setup saving settings
         default_path = os.path.expanduser(os.path.join("~", "Documents", "frames"))
-        with self.params.using_new_sublayout(
-            "save_path", "hbox", location=("next", 0, 1, 3)
-        ):
+        with self.params.using_new_sublayout("save_path", "hbox", location=("next", 0, 1, 3)):
             self.params.add_text_edit("path", label="Path", value=default_path)
 
         @controller.exsafe
@@ -204,9 +195,7 @@ class SaveBox_GUI(container.QGroupBoxContainer):
             self.params.add_check_box("make_folder", caption="Separate folder")
             self.params.add_padding(tag="parameter.path_checkboxes")
             self.params.add_check_box("add_datetime", caption="Add date/time")
-        with self.params.using_new_sublayout(
-            "name_conflict", "hbox", location=("next", 0, 1, 3)
-        ):
+        with self.params.using_new_sublayout("name_conflict", "hbox", location=("next", 0, 1, 3)):
             self.params.add_combo_box(
                 "on_name_conflict",
                 label="On duplicate name: ",
@@ -248,9 +237,7 @@ class SaveBox_GUI(container.QGroupBoxContainer):
             limiter=(1, None, "coerce", "int"),
         )
         self.params.add_toggle_button("limit_frames", "Limit", location=(-1, 2, 1, 1))
-        self.params.vs["limit_frames"].connect(
-            lambda v: self.params.set_enabled("batch_size", v)
-        )
+        self.params.vs["limit_frames"].connect(lambda v: self.params.set_enabled("batch_size", v))
         self.params.add_num_edit(
             "filesplit",
             1,
@@ -259,9 +246,7 @@ class SaveBox_GUI(container.QGroupBoxContainer):
             limiter=(1, None, "coerce", "int"),
         )
         self.params.add_toggle_button("do_filesplit", "Split", location=(-1, 2, 1, 1))
-        self.params.vs["do_filesplit"].connect(
-            lambda v: self.params.set_enabled("filesplit", v)
-        )
+        self.params.vs["do_filesplit"].connect(lambda v: self.params.set_enabled("filesplit", v))
         self.params.add_num_edit(
             "pretrigger_size",
             1,
@@ -269,9 +254,7 @@ class SaveBox_GUI(container.QGroupBoxContainer):
             formatter="int",
             limiter=(1, None, "coerce", "int"),
         )
-        self.params.add_toggle_button(
-            "pretrigger_enabled", "Enabled", location=(-1, 2, 1, 1)
-        )
+        self.params.add_toggle_button("pretrigger_enabled", "Enabled", location=(-1, 2, 1, 1))
 
         @controller.exsafe
         def update_pretrigger():
@@ -280,9 +263,7 @@ class SaveBox_GUI(container.QGroupBoxContainer):
 
         self.params.vs["pretrigger_size"].connect(update_pretrigger)
         self.params.vs["pretrigger_enabled"].connect(update_pretrigger)
-        self.params.add_button(
-            "pretrigger_clear", "Clear pretrigger", location=("next", 2, 1, 1)
-        )
+        self.params.add_button("pretrigger_clear", "Clear pretrigger", location=("next", 2, 1, 1))
         self.params.vs["pretrigger_clear"].connect(self.cam_ctl.clear_pretrigger)
         self.params.add_check_box(
             "save_settings", value=True, caption="Save settings", location=(-1, 0, 1, 2)
@@ -299,14 +280,10 @@ class SaveBox_GUI(container.QGroupBoxContainer):
         pic_path = os.path.join(root_folder, "resources/rec.png")
         if os.path.exists(pic_path):
             self.params.w["saving"].setIcon(QtGui.QIcon(QtGui.QPixmap(pic_path)))
-        self.params.vs["saving"].connect(
-            lambda v: self.cam_ctl.toggle_saving(mode="full", start=v)
-        )
+        self.params.vs["saving"].connect(lambda v: self.cam_ctl.toggle_saving(mode="full", start=v))
         self.message_log_window = MessageLogWindow(self)
         self.message_log_window.setup(self.cam_ctl)
-        self.params.add_button(
-            "show_log_window", "Document events...", location=("next", 0, 1, 2)
-        )
+        self.params.add_button("show_log_window", "Document events...", location=("next", 0, 1, 2))
 
         @controller.exsafe
         def show_message_log():
@@ -371,9 +348,7 @@ class SaveBox_GUI(container.QGroupBoxContainer):
         for p in ["path", "format", "make_folder", "add_datetime", "default_snap_path"]:
             self.params.vs[p].connect(update_snap_path)
         self.v["default_snap_path"] = True
-        with self.params.using_new_sublayout(
-            "snap_saving", "hbox", location=("next", 0, 1, 3)
-        ):
+        with self.params.using_new_sublayout("snap_saving", "hbox", location=("next", 0, 1, 3)):
             self.params.add_button("snap_displayed", "Snap")
             self.params.w["snap_displayed"].setMinimumWidth(50)
             self.params.vs["snap_displayed"].connect(
@@ -383,9 +358,7 @@ class SaveBox_GUI(container.QGroupBoxContainer):
             )
             self.params.add_combo_box("snap_display_source", options=[])
             self.update_display_source_options(reset_value=True)
-            self.cam_ctl.frames_sources_updates.connect(
-                self.update_display_source_options
-            )
+            self.cam_ctl.frames_sources_updates.connect(self.update_display_source_options)
             self.params.add_padding(tag="parameter.snap_format")
             self.params.add_decoration_label("as", tag="parameter.snap_format")
             self.params.add_combo_box(
@@ -413,18 +386,14 @@ class SaveBox_GUI(container.QGroupBoxContainer):
     def _expand_name(self, name, idx=None, add_datetime=False, as_folder=False):
         if add_datetime:
             pathgen_kind = "folder" if as_folder else "file"
-            pathgen = self.cam_ctl.settings.get(
-                ("interface/datetime_path", pathgen_kind), "sfx"
-            )
+            pathgen = self.cam_ctl.settings.get(("interface/datetime_path", pathgen_kind), "sfx")
             pathgen = self._path_gens.get(pathgen, pathgen)
             date = datetime.datetime.now()
-            name = pathgen.format(
-                name=name, date=date.strftime(r"%Y%m%d_%H%M%S"), datetime=date
-            )
+            name = pathgen.format(name=name, date=date.strftime(r"%Y%m%d_%H%M%S"), datetime=date)
             if idx is not None:
-                name = "{}_{:03d}".format(name, idx)
+                name = f"{name}_{idx:03d}"
         elif idx is not None:
-            name = "{}{:03d}".format(name, idx)
+            name = f"{name}{idx:03d}"
         return name
 
     def _is_name_taken(self, path, ext, split=False, as_folder=False):
@@ -432,7 +401,7 @@ class SaveBox_GUI(container.QGroupBoxContainer):
             return os.path.exists(os.path.join(path))
         folder, name = os.path.split(path)
         for sfx in ["settings.dat", "frameinfo.dat", "background.bin", "eventlog.dat"]:
-            if os.path.exists(os.path.join(folder, "{}_{}".format(name, sfx))):
+            if os.path.exists(os.path.join(folder, f"{name}_{sfx}")):
                 return True
         if split:
             file_filter = re.escape(name) + r"_\d+" + re.escape(ext)
@@ -451,17 +420,13 @@ class SaveBox_GUI(container.QGroupBoxContainer):
         params["batch_size"] = self.v["batch_size"] if self.v["limit_frames"] else None
         params["format"] = self.v["snap_format" if mode == "snap" else "format"]
         if mode == "full":
-            params["format_parameters"] = (
-                self.format_parameters_window.collect_parameters(params["format"])
+            params["format_parameters"] = self.format_parameters_window.collect_parameters(
+                params["format"]
             )
         if resolve_path:
             use_snap_parameters = mode == "snap" and not self.v["default_snap_path"]
-            add_datetime = self.v[
-                "snap_add_datetime" if use_snap_parameters else "add_datetime"
-            ]
-            make_folder = self.v[
-                "snap_make_folder" if use_snap_parameters else "make_folder"
-            ]
+            add_datetime = self.v["snap_add_datetime" if use_snap_parameters else "add_datetime"]
+            make_folder = self.v["snap_make_folder" if use_snap_parameters else "make_folder"]
             fext = self._default_ext[params["format"]]
             aext = self._allowed_ext[params["format"]]
             path_kind = "snap_path" if mode == "snap" else "path"
@@ -527,14 +492,15 @@ class SaveBox_GUI(container.QGroupBoxContainer):
         just_started = not self.record_in_progress and record_in_progress
         self.record_in_progress = record_in_progress
         if just_stopped:  # record just stopped
-            if not self.cam_ctl.no_popup and params.get(
-                "status/error", ("none", None)
-            ) != ("none", None):
+            if not self.cam_ctl.no_popup and params.get("status/error", ("none", None)) != (
+                "none",
+                None,
+            ):
                 error_text = _get_error_message(params["status/error"], long=True)
                 QtWidgets.QMessageBox.warning(
                     self,
                     "Saving issue",
-                    "Saving experienced an issue: {}".format(error_text),
+                    f"Saving experienced an issue: {error_text}",
                     QtWidgets.QMessageBox.Ok,
                 )
             elif self.popup_on_missing_frames and not self.cam_ctl.no_popup:
@@ -567,12 +533,8 @@ class SaveBox_GUI(container.QGroupBoxContainer):
             "stream_mode",
         ]
         self.params.set_enabled(block_on_record, not record_in_progress)
-        self.params.set_enabled(
-            ["batch_size"], self.v["limit_frames"] and not record_in_progress
-        )
-        self.params.set_enabled(
-            ["filesplit"], self.v["do_filesplit"] and not record_in_progress
-        )
+        self.params.set_enabled(["batch_size"], self.v["limit_frames"] and not record_in_progress)
+        self.params.set_enabled(["filesplit"], self.v["do_filesplit"] and not record_in_progress)
         self.params.set_enabled(
             ["pretrigger_size", "pretrigger_clear"],
             self.v["pretrigger_enabled"] and not record_in_progress,
@@ -630,12 +592,8 @@ class SaveStatus_GUI(param_table.StatusTable):
                 fmt=error_fmt,
             )
             self.update_status_line("issues")
-        self.add_num_label(
-            "frames/received", formatter=("int"), label="Frames received:"
-        )
-        self.add_num_label(
-            "frames/scheduled", formatter=("int"), label="Frames scheduled:"
-        )
+        self.add_num_label("frames/received", formatter=("int"), label="Frames received:")
+        self.add_num_label("frames/scheduled", formatter=("int"), label="Frames scheduled:")
         self.add_num_label("frames/saved", formatter=("int"), label="Frames saved:")
         self.add_num_label("frames/missed", formatter=("int"), label="Frames missed:")
         self.add_text_label("frames/status_line_check", label="Status line:")
@@ -643,9 +601,7 @@ class SaveStatus_GUI(param_table.StatusTable):
         self.add_num_label(
             "frames/pretrigger_frames", formatter=("int"), label="Pretrigger frames:"
         )
-        self.add_num_label(
-            "frames/pretrigger_ram", formatter=("int"), label="Pretrigger RAM:"
-        )
+        self.add_num_label("frames/pretrigger_ram", formatter=("int"), label="Pretrigger RAM:")
         self.add_num_label(
             "frames/pretrigger_skipped", formatter=("int"), label="Pretrigger missed:"
         )
@@ -671,22 +627,17 @@ class SaveStatus_GUI(param_table.StatusTable):
                 params["frames/queue_ram"] / 2**20,
                 params["frames/max_queue_ram"] / 2**20,
             )
-        if (
-            "frames/pretrigger_status" in params
-            and params["frames/pretrigger_status"] is not None
-        ):
+        if "frames/pretrigger_status" in params and params["frames/pretrigger_status"] is not None:
             stats = params["frames/pretrigger_status"]
-            self.v["frames/pretrigger_frames"] = "{} / {}".format(
-                stats.frames, stats.size
-            )
-            self.v["frames/pretrigger_skipped"] = "{}".format(stats.skipped)
+            self.v["frames/pretrigger_frames"] = f"{stats.frames} / {stats.size}"
+            self.v["frames/pretrigger_skipped"] = f"{stats.skipped}"
             self.w["frames/pretrigger_skipped"].setStyleSheet(
                 "color: red; font-weight: bold" if stats.skipped else ""
             )
             if stats.frames > 0:
                 est_tot_size = (stats.size / stats.frames) * stats.nbytes
-                self.v["frames/pretrigger_ram"] = "{:.0f} / {:.0f} Mb".format(
-                    stats.nbytes / 2**20, est_tot_size / 2**20
+                self.v["frames/pretrigger_ram"] = (
+                    f"{stats.nbytes / 2**20:.0f} / {est_tot_size / 2**20:.0f} Mb"
                 )
             else:
                 self.v["frames/pretrigger_ram"] = "0 / 0 Mb"
@@ -701,9 +652,7 @@ class SaveStatus_GUI(param_table.StatusTable):
             else:
                 self._finishing_saving_time.stop()
             self.w["saving"].setStyleSheet(
-                "background: gold; color: black"
-                if self._finishing_saving_time.passed()
-                else ""
+                "background: gold; color: black" if self._finishing_saving_time.passed() else ""
             )
         if "frames/status_line_check" in params:
             slc = params["frames/status_line_check"]
@@ -725,6 +674,4 @@ class SaveStatus_GUI(param_table.StatusTable):
             elif slc_ok:
                 self.w["frames/status_line_check"].setStyleSheet("")
             else:
-                self.w["frames/status_line_check"].setStyleSheet(
-                    "color: red; font-weight: bold"
-                )
+                self.w["frames/status_line_check"].setStyleSheet("color: red; font-weight: bold")
