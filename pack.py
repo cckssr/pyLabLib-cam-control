@@ -14,7 +14,7 @@ import setuptools  # noqa: F401  (must be imported before distutils on Python 3.
 import distutils.ccompiler  # setuptools installs a compatibility shim for the stdlib removal
 
 sys.path.append(".")
-from utils import version
+from camcontrol import version
 
 
 ### Setup comman line arguments
@@ -125,7 +125,7 @@ include_plugins = ["filter", "server", "trigger_save"] + [
     p.strip() for p in clargs.plugins.strip().split(",") if p.strip()
 ]
 control_copy_file_filter = string_utils.StringFilter(
-    include=r".*\.py|detect-log-errors\.cmd|.*\.png|LICENSE|requirements\.txt|icon\.ico$",
+    include=r".*\.py|detect-log-errors\.cmd|.*\.png|LICENSE|pyproject\.toml|icon\.ico$",
     exclude=r"pack\.py$",
 )
 control_copy_folder_filter = string_utils.StringFilter(
@@ -150,13 +150,12 @@ def copy_control(dst):
     if version:
         with open(os.path.join(dst_control, "settings.cfg"), "a") as f:
             f.write("\ninfo/version\t{}".format(version))
-    for f in file_utils.list_dir(
-        os.path.join(dst_control, "plugins"), file_filter=r".*\.py"
-    ).files:
+    dst_plugins = os.path.join(dst_control, "camcontrol", "plugins")
+    for f in file_utils.list_dir(dst_plugins, file_filter=r".*\.py").files:
         if os.path.splitext(f)[0] not in include_plugins + ["__init__", "base"]:
-            file_utils.retry_remove(os.path.join(dst_control, "plugins", f))
+            file_utils.retry_remove(os.path.join(dst_plugins, f))
     if not clargs.advanced_plugins:
-        file_utils.retry_remove_dir(os.path.join(dst_control, "plugins", "advanced"))
+        file_utils.retry_remove_dir(os.path.join(dst_plugins, "advanced"))
 
 
 def copy_docs(dst):

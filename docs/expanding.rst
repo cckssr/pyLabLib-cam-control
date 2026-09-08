@@ -25,7 +25,7 @@ where ``"some-package"`` is the name of the package to install (e.g., ``"scikit-
 Running from source
 ~~~~~~~~~~~~~~~~~~~~~~
 
-It is also possible to run cam-control in your own Python environment. All of the required code is contained in ``cam-control`` folder and can be obtained either on `GitHub <https://github.com/AlexShkarin/pylablib-cam-control/>`__ or directly from the folder. To run it, you also need to install the necessary dependencies: `NumPy <https://docs.scipy.org/doc/numpy/>`_, `SciPy <https://docs.scipy.org/doc/scipy/reference/>`_, `pandas <https://pandas.pydata.org/>`_, `Numba <https://numba.pydata.org/>`_, `RPyC <https://rpyc.readthedocs.io/en/latest/>`_, `PyQt5 <https://www.riverbankcomputing.com/software/pyqt/>`_ (or `PySide2 <https://www.pyside.org/>`_ with `shiboken2 <https://wiki.qt.io/Qt_for_Python/Shiboken>`_), `pyqtgraph <http://www.pyqtgraph.org/>`_, and `imageio <https://imageio.readthedocs.io/en/stable/>`_. All of the dependencies are included in ``requirements.txt`` file inside the ``cam-control`` folder (it can also be extracted by running ``python -m pip freeze`` in the local python command line). In addition, the GitHub-hosted version requires `pylablib <https://pylablib.readthedocs.io/en/stable/>`_ v1.4.1 (not included in ``requirements.txt``).
+It is also possible to run cam-control in your own Python environment. The source is available on `GitHub <https://github.com/AlexShkarin/pylablib-cam-control/>`__ as the installable ``camcontrol`` package. Clone the repository and run ``pip install -e .`` from its root, which installs `pylablib <https://pylablib.readthedocs.io/en/stable/>`_ and the other required dependencies (`NumPy <https://docs.scipy.org/doc/numpy/>`_, `SciPy <https://docs.scipy.org/doc/scipy/reference/>`_, `pandas <https://pandas.pydata.org/>`_, `Numba <https://numba.pydata.org/>`_, `RPyC <https://rpyc.readthedocs.io/en/latest/>`_, `PyQt5 <https://www.riverbankcomputing.com/software/pyqt/>`_, `pyqtgraph <http://www.pyqtgraph.org/>`_, and `imageio <https://imageio.readthedocs.io/en/stable/>`_) from ``pyproject.toml``. Once installed, launch it with the ``cam-control`` command (or ``python -m camcontrol``).
 
 
 .. _expanding_filter:
@@ -117,7 +117,7 @@ The first difference from the previous example is the different calculation meth
 Filter storage
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To appear in the cam-control, the file defining one or more custom filter classes should simply be added to the ``plugins/filter`` folder inside the main ``cam-control`` directory. For further examples, you can examine files already in that folder: ``builtin.py`` for :ref:`built-in filters <advanced_filter>`, ``examples.py`` for several example classes, and ``template.py`` for a template file containing a single filter class.
+To appear in cam-control, the file defining one or more custom filter classes should be added to a ``plugins/filters`` folder placed next to your settings file (created if it does not already exist) -- this directory is scanned in addition to the filters bundled with the package. For further examples, you can examine the bundled filter files: ``builtin.py`` for :ref:`built-in filters <advanced_filter>`, ``examples.py`` for several example classes, and ``template.py`` for a template file containing a single filter class (these live in the installed ``camcontrol.plugins.filters`` package).
 
 Debugging
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -125,11 +125,10 @@ Debugging
 Debugging a filter class by running it from the camera control might be cumbersome. Instead, it might be more convenient to test it on generated or pre-loaded frames. Here is a short snippet for doing that::
 
     ### Simple filter testing script
-    # Assume that it is a separate .py file located in the main 
-    #   cam-control folder (the one with control.py) 
-    
+    # Run from any environment where camcontrol is installed (e.g. `pip install -e .`)
+
     # import the filters module
-    from plugins.filters import examples
+    from camcontrol.plugins.filters import examples
 
     import numpy as np
 

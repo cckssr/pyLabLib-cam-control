@@ -585,9 +585,9 @@ class PluginManager:
 
     def __init__(self, settings, ext_controller_names=None):
         self.settings = settings
+        extra_dir = os.path.join(settings.get("runtime/root_folder", default=""), "plugins")
         self.plugin_classes = {
-            p.get_class_name(): p
-            for p in find_plugins("plugins", root=settings["runtime/root_folder"])
+            p.get_class_name(): p for p in find_plugins(extra_dir=extra_dir)
         }
         self._running_plugins = {}
         self._ext_controller_names = ext_controller_names
@@ -693,30 +693,65 @@ class PluginManager:
 root_module_name = __name__.rsplit(".", maxsplit=1)[0]
 
 
-def find_plugins(folder, root=""):
+def _load_modules(directory, namespace):
     """
-    Find all plugin classes in all files contained in the given folder.
+    Dynamically import every ``.py`` file under `directory` (recursively), registering each
+    under ``<namespace>.<relative dotted path>`` in :data:`sys.modules` (reusing an existing
+    entry of that name if one is already loaded).
 
-    Plugin class is any subclass of :cls:`IPlugin` which is not :cls:`IPlugin` itself.
+    A module that fails to import (e.g., because an optional vendor dependency is missing)
+    is skipped with a warning instead of aborting discovery of the rest.
+
+    Return the list of module names this call covers (whether freshly loaded or already cached).
     """
+    module_names = []
+    if not os.path.isdir(directory):
+        return module_names
     files = file_utils.list_dir_recursive(
-        os.path.join(root, folder),
+        directory,
         file_filter=r".*\.py$",
         visit_folder_filter=string_utils.get_string_filter(exclude="__pycache__"),
     ).files
-    plugins = []
     for f in files:
-        f = os.path.join(folder, f)
-        module_name = os.path.splitext(f)[0].replace("\\", ".").replace("/", ".")
-        if module_name not in sys.modules:
-            spec = importlib.util.spec_from_file_location(
-                module_name, os.path.join(root, f)
-            )
-            mod = importlib.util.module_from_spec(spec)
+        if f == "__init__.py":
+            continue
+        rel = os.path.splitext(f)[0].replace("\\", ".").replace("/", ".")
+        module_name = "{}.{}".format(namespace, rel)
+        module_names.append(module_name)
+        if module_name in sys.modules:
+            continue
+        spec = importlib.util.spec_from_file_location(module_name, os.path.join(directory, f))
+        mod = importlib.util.module_from_spec(spec)
+        try:
             spec.loader.exec_module(mod)
-            sys.modules[module_name] = mod
-    for module_name in sys.modules:
-        if module_name.startswith(root_module_name + "."):
+        except Exception as e:
+            print("Could not load module {}: {}".format(module_name, e), file=sys.stderr)
+            module_names.remove(module_name)
+            continue
+        sys.modules[module_name] = mod
+    return module_names
+
+
+def find_plugins(extra_dir=None):
+    """
+    Find all plugin classes.
+
+    Scans the plugins bundled with this package. If `extra_dir` is given and exists (and is
+    not the bundled plugins directory itself, e.g. when running from a source checkout), it is
+    also scanned for user-supplied plugins -- this is the hook for adding custom plugins
+    without modifying the package, typically a ``plugins`` folder placed next to the settings
+    file.
+
+    Plugin class is any subclass of :cls:`IPlugin` which is not :cls:`IPlugin` itself.
+    """
+    builtin_dir = os.path.dirname(__file__)
+    _load_modules(builtin_dir, root_module_name)
+    if extra_dir and os.path.isdir(extra_dir):
+        if os.path.realpath(extra_dir) != os.path.realpath(builtin_dir):
+            _load_modules(extra_dir, root_module_name + ".external")
+    plugins = []
+    for module_name in list(sys.modules):
+        if module_name == root_module_name or module_name.startswith(root_module_name + "."):
             mod = sys.modules[module_name]
             for v in mod.__dict__.values():
                 if isinstance(v, type) and issubclass(v, IPlugin) and v is not IPlugin:

@@ -35,5 +35,13 @@ dev = [
     "setuptools>=68",  # pack.py needs this for the distutils compatibility shim on Python 3.12+
 ]
 
+[project.scripts]
+cam-control = "camcontrol.splash:main"
+cam-control-console = "camcontrol.app:main"
+cam-control-detect = "camcontrol.detect:main"
+
 [tool.setuptools.packages.find]
-include = ["utils*", "plugins*"]
+include = ["camcontrol*"]
+
+[tool.setuptools.package-data]
+"camcontrol.resources" = ["*.ico", "*.png"]

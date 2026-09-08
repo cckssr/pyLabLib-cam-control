@@ -16,12 +16,6 @@
 import os
 import sys
 
-if __name__ == "__main__":
-    startdir = os.path.abspath(os.getcwd())
-    os.chdir(os.path.abspath(os.path.dirname(sys.argv[0])))
-    sys.path.append(
-        os.path.abspath(".")
-    )  # set current folder to the file location and add it to the search path
 if sys.platform == "win32":
     python_folder = os.path.split(os.path.abspath(sys.executable))[0]
     pywin32_folder = os.path.join(python_folder, "Lib", "site-packages", "pywin32_system32")
@@ -67,24 +61,25 @@ except ImportError:
     win32com_present = False
 
 
-from utils.gui import (
+from camcontrol.gui import (
     camera_control,
     SaveBox_ctl,
     ProcessingIndicator_ctl,
     ActivityIndicator_ctl,
 )
-from utils.gui import (
+from camcontrol.gui import (
     DisplaySettings_ctl,
     FramePreprocess_ctl,
     FrameProcess_ctl,
     PlotControl_ctl,
 )
-from utils.gui import tutorial, color_theme, settings_editor, about, error_message
-from utils import services
-from utils.services import dev as dev_services
-from utils.cameras.loader import camera_descriptors
-import plugins
-import splash
+from camcontrol.gui import tutorial, color_theme, settings_editor, about, error_message
+from camcontrol import services
+from camcontrol.services import dev as dev_services
+from camcontrol.cameras.loader import camera_descriptors
+from camcontrol import plugins
+from camcontrol import splash
+from camcontrol.resources import resource_path
 
 
 ### Redirecting console / errors to file logs ###
@@ -110,11 +105,13 @@ class StreamLogger(general_utils.StreamFileLogger):
         )
 
 
-sys.stderr = StreamLogger("logerr.txt", sys.stderr)
-sys.stdout = StreamLogger("logout.txt", sys.stdout)
+def configure_logging():
+    """Redirect stdout/stderr to log files in the current working directory."""
+    sys.stderr = StreamLogger("logerr.txt", sys.stderr)
+    sys.stdout = StreamLogger("logout.txt", sys.stdout)
 
 
-from utils import version, compare_version
+from camcontrol import version, compare_version
 
 _defaults_filename = "defaults.cfg"
 _locals_filename = "locals.cfg"
@@ -167,7 +164,7 @@ class StandaloneFrame(container.QWidgetContainer):
             "display_name", self.cam_name
         )
         self.setWindowTitle("{} control".format(cam_display_name))
-        self.setWindowIcon(QtGui.QIcon("icon.ico"))
+        self.setWindowIcon(QtGui.QIcon(resource_path("icon.ico")))
         self.cam_ctl = camera_control.GenericCameraCtl(
             cam_thread=cam_thread,
             frame_src_thread=process_thread,
@@ -445,12 +442,9 @@ class StandaloneFrame(container.QWidgetContainer):
                 options=["Tutorial", "Create camera shortcut", "Preferences", "About"],
                 index_values=["tutorial", "cam_shortcut", "settings_editor", "about"],
             )
-            root_folder = self.settings.get("runtime/root_folder", default="")
-            pic_path = os.path.join(root_folder, "resources/cog.png")
-            if os.path.exists(pic_path):
-                self.params_loading_settings.w["extras"].setIcon(
-                    QtGui.QIcon(QtGui.QPixmap(pic_path))
-                )
+            self.params_loading_settings.w["extras"].setIcon(
+                QtGui.QIcon(QtGui.QPixmap(resource_path("cog.png")))
+            )
         self.params_loading_settings.vs["load_settings"].connect(
             self.on_load_settings_button
         )
@@ -544,7 +538,7 @@ class StandaloneFrame(container.QWidgetContainer):
             shortcut.TargetPath = os.path.abspath(os.path.join("..", "control.exe"))
             shortcut.WorkingDirectory = os.path.abspath(os.path.join(".."))
             shortcut.Arguments = '-c "{}"'.format(self.cam_name)
-            shortcut.IconLocation = os.path.abspath("icon.ico")
+            shortcut.IconLocation = resource_path("icon.ico")
             shortcut.Save()
 
     @controller.exsafeSlot(object)
@@ -790,7 +784,7 @@ class CamSelectFrame(param_table.ParamTable):
         self.setWindowFlag(QtCore.Qt.WindowMinimizeButtonHint, False)
         self.setMinimumWidth(300)
         self.setWindowTitle("Select camera...")
-        self.setWindowIcon(QtGui.QIcon("icon.ico"))
+        self.setWindowIcon(QtGui.QIcon(resource_path("icon.ico")))
         self.selected = False  # prevents double-call on multiple clicks
         cameras = self.settings["cameras"]
         cam_ids = list(cameras)
@@ -833,7 +827,7 @@ class MissingSettingsFrame(param_table.ParamTable):
         super().setup(name="missing_settings", add_indicator=False)
         self.path = path
         self.setWindowTitle("Import config...")
-        self.setWindowIcon(QtGui.QIcon("icon.ico"))
+        self.setWindowIcon(QtGui.QIcon(resource_path("icon.ico")))
         self.setWindowFlag(QtCore.Qt.WindowMaximizeButtonHint, False)
         self.setWindowFlag(QtCore.Qt.WindowMinimizeButtonHint, False)
         self.setFixedWidth(300)
@@ -912,7 +906,15 @@ class MissingSettingsFrame(param_table.ParamTable):
                 if os.path.exists(pythonexec):
                     break
             subprocess.call(
-                [pythonexec, "detect.py", "--yes", "--wait", "--config-file", self.path]
+                [
+                    pythonexec,
+                    "-m",
+                    "camcontrol.detect",
+                    "--yes",
+                    "--wait",
+                    "--config-file",
+                    self.path,
+                ]
             )
             start_app(ask_on_no_cam=False)
 
@@ -946,21 +948,27 @@ error_display = ErrorBoxDisplay()
 
 
 ### Command line arguments ###
-parser = argparse.ArgumentParser(
-    description="Pylablib cam-control software for controlling all connected cameras"
-)
-parser.add_argument("--camera", "-c", help="controlled camera name", metavar="CAM_NAME")
-parser.add_argument(
-    "--config-file",
-    "-cf",
-    help="configuration file path",
-    metavar="FILE",
-    default="settings.cfg",
-)
-parser.add_argument(
-    "--subconfig", "-sc", help="subconfiguration name", metavar="SC_NAME"
-)
-argvp = parser.parse_args()
+def _parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Pylablib cam-control software for controlling all connected cameras"
+    )
+    parser.add_argument(
+        "--camera", "-c", help="controlled camera name", metavar="CAM_NAME"
+    )
+    parser.add_argument(
+        "--config-file",
+        "-cf",
+        help="configuration file path",
+        metavar="FILE",
+        default="settings.cfg",
+    )
+    parser.add_argument(
+        "--subconfig", "-sc", help="subconfiguration name", metavar="SC_NAME"
+    )
+    return parser.parse_args(argv)
+
+
+argvp = None
 
 
 def load_config(path):
@@ -1158,6 +1166,18 @@ def execute(app=None):
     error_display.check_for_error()
 
 
+def main(argv=None, app=None):
+    """
+    Run the application.
+
+    If `app` is given (e.g. a QApplication already created to show a splash screen), use it and
+    wire up the GUI-mode exception hook; otherwise create a console-mode QApplication.
+    """
+    configure_logging()
+    global argvp
+    argvp = _parse_args(argv)
+    execute(app=app)
+
+
 if __name__ == "__main__":
-    execute()
-    os.chdir(startdir)
+    main()

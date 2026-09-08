@@ -8,8 +8,7 @@ from .cam_gui_parameters import (
     EnumGUIParameter,
     ROIGUIParameter,
 )
-
-import os
+from camcontrol.resources import resource_path
 
 
 class ICameraSettings_GUI(container.QWidgetContainer):
@@ -70,15 +69,12 @@ class ICameraSettings_GUI(container.QWidgetContainer):
         self.settings_params.add_button(
             "stop", "Stop acquisition", location=(-1, 1, 1, 1)
         )
-        root_folder = self.ctl.get_variable("settings/runtime/root_folder", default="")
-        pic_path = os.path.join(root_folder, "resources/play.png")
-        if os.path.exists(pic_path):
-            self.settings_params.w["start"].setIcon(
-                QtGui.QIcon(QtGui.QPixmap(pic_path))
-            )
-        pic_path = os.path.join(root_folder, "resources/stop.png")
-        if os.path.exists(pic_path):
-            self.settings_params.w["stop"].setIcon(QtGui.QIcon(QtGui.QPixmap(pic_path)))
+        self.settings_params.w["start"].setIcon(
+            QtGui.QIcon(QtGui.QPixmap(resource_path("play.png")))
+        )
+        self.settings_params.w["stop"].setIcon(
+            QtGui.QIcon(QtGui.QPixmap(resource_path("stop.png")))
+        )
         self.settings_params.add_button(
             "connect", "Connect", location=("next", 0, 1, 1)
         )

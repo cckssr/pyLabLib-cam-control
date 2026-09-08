@@ -17,46 +17,6 @@ import os
 import sys
 import argparse
 
-if __name__ == "__main__":
-    os.chdir(os.path.join(".", os.path.split(sys.argv[0])[0]))
-    sys.path.append(
-        "."
-    )  # set current folder to the file location and add it to the search path
-    parser = argparse.ArgumentParser(description="Camera autodetection")
-    parser.add_argument("--silent", "-s", help="silent execution", action="store_true")
-    parser.add_argument(
-        "--yes",
-        "-y",
-        help="automatically confirm settings file overwrite",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--nosave",
-        "-n",
-        help="skip saving detected cameras to the settings file (only used for diagnostics)",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--show-errors",
-        help="show errors raised on camera detection",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--wait",
-        help="show waiting message for 3 seconds in the end",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--config-file",
-        "-cf",
-        help="configuration file path",
-        metavar="FILE",
-        default="settings.cfg",
-    )
-    args = parser.parse_args()
-    if not args.silent:
-        print("Detecting cameras...\n")
-
 from pylablib.core.utils import dictionary, general as general_utils
 from pylablib.core.fileio.loadfile import load_dict
 from pylablib.core.fileio.savefile import save_dict
@@ -66,7 +26,7 @@ import time
 import threading
 import datetime
 
-from utils.cameras.loader import camera_descriptors
+from camcontrol.cameras.loader import camera_descriptors
 
 ### Redirecting console / errors to file logs ###
 log_lock = threading.RLock()
@@ -86,11 +46,13 @@ class StreamLogger(general_utils.StreamFileLogger):
         )
 
 
-sys.stderr = StreamLogger("logerr.txt", sys.stderr)
-sys.stdout = StreamLogger("logout.txt", sys.stdout)
-detect_logger = StreamLogger("logdetect.txt")
-sys.stderr.add_stream(detect_logger)
-sys.stdout.add_stream(detect_logger)
+def configure_logging():
+    """Redirect stdout/stderr to log files in the current working directory."""
+    sys.stderr = StreamLogger("logerr.txt", sys.stderr)
+    sys.stdout = StreamLogger("logout.txt", sys.stdout)
+    detect_logger = StreamLogger("logdetect.txt")
+    sys.stderr.add_stream(detect_logger)
+    sys.stdout.add_stream(detect_logger)
 
 
 def detect_all(verbose=False):
@@ -148,7 +110,46 @@ def update_settings_file(
         time.sleep(3.0)
 
 
-if __name__ == "__main__":
+def _parse_args(argv=None):
+    parser = argparse.ArgumentParser(description="Camera autodetection")
+    parser.add_argument("--silent", "-s", help="silent execution", action="store_true")
+    parser.add_argument(
+        "--yes",
+        "-y",
+        help="automatically confirm settings file overwrite",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--nosave",
+        "-n",
+        help="skip saving detected cameras to the settings file (only used for diagnostics)",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--show-errors",
+        help="show errors raised on camera detection",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--wait",
+        help="show waiting message for 3 seconds in the end",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--config-file",
+        "-cf",
+        help="configuration file path",
+        metavar="FILE",
+        default="settings.cfg",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = _parse_args(argv)
+    configure_logging()
+    if not args.silent:
+        print("Detecting cameras...\n")
     if os.path.exists(args.config_file):
         settings = load_dict(args.config_file)
         if "dlls" in settings:
@@ -165,3 +166,7 @@ if __name__ == "__main__":
         wait=args.wait,
         do_save=not args.nosave,
     )
+
+
+if __name__ == "__main__":
+    main()

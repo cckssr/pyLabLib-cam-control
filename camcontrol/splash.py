@@ -1,17 +1,10 @@
 from PyQt5 import QtWidgets, QtCore, QtGui
 
-import os
 import sys
 import ctypes
 
-if __name__ == "__main__":
-    startdir = os.path.abspath(os.getcwd())
-    os.chdir(os.path.abspath(os.path.dirname(sys.argv[0])))
-    sys.path.append(
-        os.path.abspath(".")
-    )  # set current folder to the file location and add it to the search path
-
-from utils import version
+from camcontrol import version
+from camcontrol.resources import resource_path
 
 
 def prepare_app():
@@ -29,7 +22,7 @@ class SplashScreen(QtWidgets.QSplashScreen):
     """
 
     def __init__(self):
-        pixmap = QtGui.QPixmap("./splash.png")
+        pixmap = QtGui.QPixmap(resource_path("splash.png"))
         super().__init__(pixmap)
         self.setObjectName("camControlSplash")
         self.current_style = QtCore.QCoreApplication.instance().style()
@@ -79,7 +72,8 @@ def update_splash_screen(show=None, msg=None):
             splash.show_message(msg)
 
 
-if __name__ == "__main__":
+def main():
+    """Show the splash screen, then hand off to the main application."""
     if sys.platform == "win32":
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
             "cam-control"
@@ -95,8 +89,10 @@ if __name__ == "__main__":
     splash.setWindowState(splash.windowState() & ~QtCore.Qt.WindowMinimized)
     app.processEvents()
 
-    import control
+    from camcontrol import app as camapp
 
-    control.execute(app)
+    camapp.main(app=app)
 
-    os.chdir(startdir)
+
+if __name__ == "__main__":
+    main()

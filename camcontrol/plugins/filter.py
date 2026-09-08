@@ -1,5 +1,5 @@
 from . import base
-from pylablib.core.utils import dictionary, files as file_utils, string as string_utils
+from pylablib.core.utils import dictionary
 from pylablib.core.thread import controller
 from pylablib.thread.stream import StreamSource, FramesMessage
 from pylablib.devices.interface.camera import remove_status_line
@@ -7,12 +7,11 @@ from pylablib import widgets
 
 import numpy as np
 import os
-import importlib
 import sys
 
 
 from .filters.base import IFrameFilter
-from utils.gui import DisplaySettings_ctl, ProcessingIndicator_ctl
+from camcontrol.gui import DisplaySettings_ctl, ProcessingIndicator_ctl
 
 
 class FilterPanel(widgets.QFrameContainer):
@@ -681,10 +680,10 @@ class FilterPlugin(base.IPlugin):
             )
 
     def _collect_filters(self):
-        fcls = find_filters(
-            os.path.join("plugins", "filters"),
-            root=self.gui.settings["runtime/root_folder"],
+        extra_dir = os.path.join(
+            self.gui.settings.get("runtime/root_folder", default=""), "plugins", "filters"
         )
+        fcls = find_filters(extra_dir=extra_dir)
         self.filter_classes = {cls.get_class_name(): cls for cls in fcls}
         self.filter_captions = {
             cls.get_class_name(): cls.get_class_name(kind="caption") for cls in fcls
@@ -735,29 +734,29 @@ class FilterPlugin(base.IPlugin):
         ).asdict("flat")
 
 
-def find_filters(folder, root=""):
+def find_filters(extra_dir=None):
     """
-    Find all filter classes in all files contained in the given folder.
+    Find all filter classes.
+
+    Scans the filters bundled with this package. If `extra_dir` is given and exists (and is
+    not the bundled filters directory itself, e.g. when running from a source checkout), it is
+    also scanned for user-supplied filters -- this is the hook for adding custom filters
+    without modifying the package, typically a ``plugins/filters`` folder placed next to the
+    settings file.
 
     Filter class is any subclass of :cls:`IFrameFilter` which has ``_class_name`` attribute which is not ``None``.
     """
-    files = file_utils.list_dir_recursive(
-        os.path.join(root, folder),
-        file_filter=r".*\.py$",
-        visit_folder_filter=string_utils.get_string_filter(exclude="__pycache__"),
-    ).files
+    builtin_dir = os.path.join(os.path.dirname(__file__), "filters")
+    namespace = base.root_module_name + ".filters"
+    module_names = base._load_modules(builtin_dir, namespace)
+    if extra_dir and os.path.isdir(extra_dir):
+        if os.path.realpath(extra_dir) != os.path.realpath(builtin_dir):
+            module_names += base._load_modules(extra_dir, namespace + ".external")
     filters = []
-    for f in files:
-        f = os.path.join(folder, f)
-        module_name = os.path.splitext(f)[0].replace("\\", ".").replace("/", ".")
-        if module_name not in sys.modules:
-            spec = importlib.util.spec_from_file_location(
-                module_name, os.path.join(root, f)
-            )
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            sys.modules[module_name] = mod
-        mod = sys.modules[module_name]
+    for module_name in module_names:
+        mod = sys.modules.get(module_name)
+        if mod is None:
+            continue
         for v in mod.__dict__.values():
             if isinstance(v, type):
                 if (
