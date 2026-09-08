@@ -1,0 +1,15 @@
+target-version = "py312"
+line-length = 100
+
+[format]
+docstring-code-format = true
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    "E501",  # line length handled by formatter
+    "E402",  # control.py/detect.py/splash.py chdir + sys.path.append before imports is intentional
+]
+
+[lint.per-file-ignores]
+"pack.py" = ["UP"]  # touches distutils/Windows build tooling, keep literal
