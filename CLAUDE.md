@@ -69,7 +69,8 @@ Declared in `pyproject.toml` with lower-bound pins (not `==`): `pylablib>=1.4.5`
 `numba>=0.61`, `imageio`, `Pillow`, `rpyc`, `qdarkstyle`, `plumbum`, plus
 `pywin32` on Windows only. Verified installable and working end-to-end on
 Python 3.14 (macOS arm64; Windows expected but not independently verified
-in this environment).
+in this environment). `pyusb>=1.3.1` is an optional extra (`.[thorlabs-tsi]`),
+needed only for the `ThorlabsTSIDirect` camera backend — see below.
 
 ## Architecture
 
@@ -88,6 +89,7 @@ camcontrol/
   plugins/            # plugin framework + built-ins (formerly top-level plugins/)
     filters/          # frame filter framework + built-ins
   resources/           # icon.ico, splash.png, button icons + resource_path() helper
+  thorlabs_tsi/        # vendored direct-USB driver for Thorlabs TSI cameras (no vendor SDK)
 ```
 
 `camcontrol/app.py`, `detect.py`, `splash.py` are side-effect-free on import:
@@ -138,6 +140,32 @@ rather than aborting the whole registry — verified all 22 other kinds
 
 `cameras/sim.py` (`simulated` kind) is the only backend requiring no vendor
 DLLs — it's the natural target for local development and tests.
+
+#### Thorlabs TSI: two independent backends for the same hardware
+
+`cameras/ThorlabsTLCam.py` (`_cam_kind = "ThorlabsTLCam"`) wraps pylablib's own
+`pylablib.devices.Thorlabs.ThorlabsTLCamera`, which in turn needs the vendor
+SDK/DLL (ThorCam) installed. `cameras/ThorlabsTSIDirect.py`
+(`_cam_kind = "ThorlabsTSIDirect"`) is a second, independent descriptor for the
+same camera families (Zelux CS165MU/CU; Kiralux/Quantalux CS-series) that talks
+to the camera directly over USB via `camcontrol/thorlabs_tsi/` — a vendored,
+reverse-engineered driver (ASCII command channel + bulk image endpoint, no
+vendor SDK/DLL, `pyusb`/libusb only) — needs the `thorlabs-tsi` extra
+(`pip install -e .[thorlabs-tsi]`). Both register and coexist; pick per-camera
+in `settings.cfg`. The direct-USB backend covers basic streaming only (ROI,
+exposure, gain) — no binning, no hardware triggering, and no debayering (a
+color body's frames come back as the raw Bayer mosaic); see
+`camcontrol/thorlabs_tsi/camera.py`'s module docstring for what's covered.
+`ThorlabsTSICamera` (in `ThorlabsTSIDirect.py`) adapts the driver's pull-based
+frame queue to pylablib's `IROICamera`/`IExposureCamera` interface with a poll
+thread feeding a ring buffer + `FrameNotifier`, mirroring the callback-driven
+buffer `ThorlabsTLCamera` builds around the vendor SDK's push callback.
+**Not verified against real hardware** — built and tested against the loader
+registry, `iterate_cameras`/`detect()` with no camera attached, and the
+existing pytest suite (none of which exercise a live USB connection); the
+on-wire protocol it implements is documented as `[live]`-verified in the
+originating driver's own `protocol.md`, but the pylablib adapter layer added
+here has not been.
 
 ### Plugins and filters (two independent extension systems)
 
@@ -197,6 +225,9 @@ ships these files with the wheel.
   commands over TCP and uses peer-supplied `dtype`/`shape` to build a numpy
   array from the payload — bind to loopback or add auth before exposing it on
   a shared network.
+- `ThorlabsTSIDirect` (the direct-USB Thorlabs TSI backend, see above) has not
+  been exercised against real hardware — only the registry/discovery paths and
+  the pytest suite, none of which open a live USB connection.
 - No CI yet (no `.github/workflows/`).
 
 ## Testing
