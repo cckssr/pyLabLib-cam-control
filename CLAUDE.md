@@ -69,7 +69,7 @@ Declared in `pyproject.toml` with lower-bound pins (not `==`): `pylablib>=1.4.5`
 `numba>=0.61`, `imageio`, `Pillow`, `rpyc`, `qdarkstyle`, `plumbum`, plus
 `pywin32` on Windows only. Verified installable and working end-to-end on
 Python 3.14 (macOS arm64; Windows expected but not independently verified
-in this environment). `pyusb>=1.3.1` is an optional extra (`.[thorlabs-tsi]`),
+in this environment). `pyusb>=1.2.1,<1.4` is an optional extra (`.[thorlabs-tsi]`),
 needed only for the `ThorlabsTSIDirect` camera backend — see below.
 
 ## Architecture
@@ -160,12 +160,27 @@ color body's frames come back as the raw Bayer mosaic); see
 frame queue to pylablib's `IROICamera`/`IExposureCamera` interface with a poll
 thread feeding a ring buffer + `FrameNotifier`, mirroring the callback-driven
 buffer `ThorlabsTLCamera` builds around the vendor SDK's push callback.
-**Not verified against real hardware** — built and tested against the loader
-registry, `iterate_cameras`/`detect()` with no camera attached, and the
-existing pytest suite (none of which exercise a live USB connection); the
-on-wire protocol it implements is documented as `[live]`-verified in the
-originating driver's own `protocol.md`, but the pylablib adapter layer added
-here has not been.
+**Verified against a real camera** (a CS165CU, direct USB, macOS): streams
+through the full app pipeline (`ThorlabsTSICamera` → `GenericCameraThread` →
+GUI), not just the loader/discovery paths. Two real bugs surfaced by that test
+and fixed: `_get_sensor_size()` was combining the wrong two fields from the
+camera's `roi.max` reply (its four fields are each an independent per-argument
+max, not "the largest legal ROI box" — see the fix's comment) and returning a
+tiny (80, 4) instead of the sensor's true (1440, 1080), which then clamped the
+ROI to a near-invisible sliver; and the vendored driver had a real upstream
+bug (`stream.py`'s `_on_transfer_error` used a bare `from bulkreader import
+...` instead of `from .bulkreader import ...`, so it raised `ModuleNotFoundError`
+on every single non-clean USB transfer completion, silently retiring that
+transfer from rotation instead of keeping it in play — untested upstream since
+nothing exercises that path without live hardware). A `stream_stats` status
+variable now surfaces the underlying reader's counters (frames missed/
+truncated/dropped, read errors) for exactly this kind of "no image, no error"
+diagnosis. One consequence worth knowing: the wrong detector size got baked
+into a running app's persisted GUI state (`defaults.cfg`, gitignored, keyed
+per camera name as `<name>/cam/cam/roi`) before the fix — a stale tiny ROI
+there will keep getting re-applied on connect even after upgrading, until
+that cached value is cleared (delete the `<name>/cam/cam/roi` line, or use
+the GUI's "Set full ROI") or `defaults.cfg` is removed outright.
 
 ### Plugins and filters (two independent extension systems)
 
@@ -225,9 +240,6 @@ ships these files with the wheel.
   commands over TCP and uses peer-supplied `dtype`/`shape` to build a numpy
   array from the payload — bind to loopback or add auth before exposing it on
   a shared network.
-- `ThorlabsTSIDirect` (the direct-USB Thorlabs TSI backend, see above) has not
-  been exercised against real hardware — only the registry/discovery paths and
-  the pytest suite, none of which open a live USB connection.
 - No CI yet (no `.github/workflows/`).
 
 ## Testing
