@@ -9,19 +9,18 @@ color pipeline; a color body's frames come back as the raw, undemosaiced Bayer m
 """
 
 import collections
+import sys
 import threading
 
 import numpy as np
 import usb.core
-import usb.util
 from pylablib.devices.interface import camera as cam_iface
 from pylablib.thread.devices.generic.camera import GenericCameraThread
 
 from ..gui import cam_gui_parameters
 from ..gui.base_cam_ctl_gui import GenericCameraSettings_GUI, GenericCameraStatus_GUI
-from ..thorlabs_tsi import protocol
-from ..thorlabs_tsi.camera import TsiCamera
-from ..thorlabs_tsi.transport import TsiCameraTransport
+from ..thorlabs_tsi.camera import TsiCamera, discover_available_cameras
+from ..thorlabs_tsi.transport import StreamDesyncError
 from .base import ICameraDescriptor
 
 TDeviceInfo = collections.namedtuple("TDeviceInfo", ["model", "serial_number"])
@@ -54,6 +53,7 @@ class ThorlabsTSICamera(cam_iface.IROICamera, cam_iface.IExposureCamera):
         self._add_info_variable("device_info", self.get_device_info)
         self._add_info_variable("gain_range", self._get_gain_range, ignore_error=Exception)
         self._add_settings_variable("gain", self.get_gain, self.set_gain)
+        self._add_status_variable("stream_stats", self._get_stream_stats, ignore_error=Exception)
 
     def _get_connection_parameters(self):
         return self.serial
@@ -102,11 +102,26 @@ class ThorlabsTSICamera(cam_iface.IROICamera, cam_iface.IExposureCamera):
     def _get_gain_range(self):
         return tuple(self._tsi.commands.limits("gain"))
 
+    def _get_stream_stats(self):
+        """Counters from the underlying USB reader thread (frames missed/truncated/dropped,
+        read errors, resync events) -- surfaced as a status variable so a stalled or silently
+        dying stream is visible instead of just showing no frames with no explanation."""
+        stats = self._tsi.stream_stats
+        return None if stats is None else stats.as_dict()
+
     ### Geometry ###
     def _get_sensor_size(self):
+        """Full sensor size, derived from ``roi.max``.
+
+        ``roi.max`` is *not* "the largest legal ROI box" -- its four fields are each the
+        independent maximum for that positional argument (e.g. x0's max is constrained by
+        the minimum ROI width, so it is nowhere near 0; see protocol.md's roi.min/.max
+        discussion). Only x1/y1 -- the maximum right/bottom edge -- describe the sensor's own
+        extent; x0/y0 from the same reply must not be combined with them.
+        """
         if self._sensor_size is None:
-            x0, y0, x1, y1 = (int(v) for v in self._tsi.commands.query("roi.max").split())
-            self._sensor_size = (x1 - x0 + 1, y1 - y0 + 1)
+            _, (_x0_max, _y0_max, x1, y1) = self._tsi.roi_range
+            self._sensor_size = (x1 + 1, y1 + 1)
         return self._sensor_size
 
     def get_detector_size(self):
@@ -182,7 +197,15 @@ class ThorlabsTSICamera(cam_iface.IROICamera, cam_iface.IExposureCamera):
         while not self._stop_poll.is_set():
             try:
                 frame = self._tsi.get_pending_frame_or_null(timeout=0.2)
-            except (usb.core.USBError, RuntimeError):
+            except StreamDesyncError as exc:
+                # By design recoverable: the assembler only ever emits chunk-aligned frames,
+                # so the *next* one already starts realigned -- see get_pending_frame_or_null's
+                # docstring. Treating this as fatal would silently end streaming on the first
+                # transient desync, which looks identical to "no camera output" from the GUI.
+                print(f"ThorlabsTSIDirect: frame desync, continuing: {exc}", file=sys.stderr)
+                continue
+            except usb.core.USBError as exc:
+                print(f"ThorlabsTSIDirect: USB error, stopping stream: {exc}", file=sys.stderr)
                 break
             if frame is None:
                 continue
@@ -257,15 +280,6 @@ class ThorlabsTSICameraThread(GenericCameraThread):
         super().setup_task(remote=remote, misc=misc)
 
 
-def _find_usb_devices():
-    """Every connected USB device matching a known Thorlabs TSI PID."""
-    return [
-        dev
-        for dev in usb.core.find(find_all=True, idVendor=protocol.VID)
-        if dev.idProduct in protocol.KNOWN_PIDS
-    ]
-
-
 class ThorlabsTSIDirectCameraDescriptor(ICameraDescriptor):
     _cam_kind = "ThorlabsTSIDirect"
 
@@ -274,7 +288,7 @@ class ThorlabsTSIDirectCameraDescriptor(ICameraDescriptor):
         if verbose:
             print("Searching for Thorlabs TSI cameras (direct USB)")
         try:
-            devices = _find_usb_devices()
+            found = discover_available_cameras()
         except usb.core.NoBackendError:
             if verbose:
                 print(
@@ -284,41 +298,26 @@ class ThorlabsTSIDirectCameraDescriptor(ICameraDescriptor):
             if verbose == "full":
                 cls.print_error()
             return
-        if not devices:
+        if not found:
             if verbose:
                 print("Found no Thorlabs TSI cameras (direct USB)\n")
             return
         if verbose:
             print(
                 "Found {} Thorlabs TSI camera{} (direct USB)".format(
-                    len(devices), "s" if len(devices) > 1 else ""
+                    len(found), "s" if len(found) > 1 else ""
                 )
             )
-        for dev in devices:
-            transport = None
-            try:
-                transport = TsiCameraTransport(dev)
-                try:
-                    usb.util.claim_interface(dev, 0)
-                except usb.core.USBError:
-                    dev.set_configuration()
-                    usb.util.claim_interface(dev, 0)
-                serial = transport.command("sernum")
-                if verbose:
-                    print(f"Found Thorlabs TSI camera serial={serial}")
-                yield transport, (dev.idProduct, serial)
-            except usb.core.USBError:
-                if verbose == "full":
-                    cls.print_error()
-            finally:
-                if transport is not None:
-                    transport.close()
+        for pid, serial, model in found:
+            if verbose:
+                print(f"Found Thorlabs TSI camera serial={serial} model={model}")
+            yield (pid, serial, model), (pid, serial, model)
 
     @classmethod
     def generate_description(cls, idx, cam=None, info=None):
-        pid, serial = info
+        pid, serial, model = info
         cam_desc = cls.build_cam_desc(params={"serial": serial, "pid": pid})
-        cam_desc["display_name"] = f"Thorlabs TSI {serial} (direct USB)"
+        cam_desc["display_name"] = f"{model} {serial} (direct USB)"
         cam_name = f"thorlabs_tsi_direct_{idx}"
         return cam_name, cam_desc
 
