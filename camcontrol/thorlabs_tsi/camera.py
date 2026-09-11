@@ -11,6 +11,7 @@ configure geometry and timing while stopped, ``arm`` then ``start``, read frames
 from __future__ import annotations
 
 import usb.core
+import usb.util
 
 from .commands import Commands
 from .frames import (
@@ -20,7 +21,9 @@ from .frames import (
     frame_chunks_on_wire,
 )
 from .protocol import (
+    KNOWN_PIDS,
     PID_ZELUX,
+    VID,
     CommandError,
     parse_frame_header,
 )
@@ -116,6 +119,16 @@ class TsiCamera:
         ``is_color`` is False. See ``frames.BAYER_PATTERNS``."""
         return self.commands.get_color_filter_phase()
 
+    @property
+    def name(self) -> str:
+        """The camera's user-assigned display name (set via ThorCam; read-only here)."""
+        return self.commands.get_name()
+
+    @property
+    def firmware_version(self) -> str:
+        """The camera's firmware version string."""
+        return self.commands.get_firmware_version()
+
     # -- settings ----------------------------------------------------------
 
     @property
@@ -128,6 +141,57 @@ class TsiCamera:
         self.commands.set_exposure_us(value)
 
     @property
+    def exposure_time_range_us(self) -> tuple[int, int]:
+        """Current (min, max) exposure time in microseconds. Moves with frame-rate control
+        and ROI -- query it again after changing either rather than caching it."""
+        return self.commands.limits("exp")
+
+    @property
+    def frame_time_us(self) -> int:
+        """Actual frame period in microseconds (read-only; follows exposure and ROI)."""
+        return self.commands.get_frame_time_us()
+
+    @property
+    def sensor_readout_time_ns(self) -> int:
+        """Sensor readout time. See ``Commands.get_sensor_readout_time_ns`` for the caveat
+        on its unit, which is inherited from the vendor SDK's naming and not independently
+        confirmed against this firmware."""
+        return self.commands.get_sensor_readout_time_ns()
+
+    @property
+    def is_frame_rate_control_enabled(self) -> bool:
+        """Whether frame-rate control (``sfr``) is on. While it is off, the frame period is
+        the shortest the current ROI allows; turn it on before setting
+        ``frame_rate_control_period_us``."""
+        return self.commands.get_frame_rate_control()[0]
+
+    @is_frame_rate_control_enabled.setter
+    def is_frame_rate_control_enabled(self, value: bool) -> None:
+        self.commands.set_frame_rate_control(value)
+
+    @property
+    def frame_rate_control_period_us(self) -> int:
+        """The frame period frame-rate control is holding to, in microseconds.
+
+        Deliberately **not** named ``frame_rate_control_value`` after the vendor SDK's own
+        property: that one is a *frequency* in fps (``tl_camera_get/set_frame_rate_control_
+        value``), while this firmware's ``sfr`` command is a *period* in microseconds --
+        aliasing the two under one name would silently swap units for anyone porting vendor
+        code. Convert with ``1e6 / period_us`` if you need fps.
+        """
+        return self.commands.get_frame_rate_control()[1]
+
+    @frame_rate_control_period_us.setter
+    def frame_rate_control_period_us(self, value: int) -> None:
+        self.commands.set_frame_period_us(value)
+
+    @property
+    def frame_rate_control_period_range_us(self) -> tuple[int, int]:
+        """Current (min, max) frame period in microseconds for frame-rate control. Moves
+        with the ROI."""
+        return self.commands.limits("sfr")
+
+    @property
     def gain(self) -> int:
         """Raw gain, in the camera's own units."""
         return self.commands.get_gain()
@@ -135,6 +199,32 @@ class TsiCamera:
     @gain.setter
     def gain(self, value: int) -> None:
         self.commands.set_gain(value)
+
+    @property
+    def gain_range(self) -> tuple[int, int]:
+        """Current (min, max) for ``gain``, in the same raw units as ``gain`` itself --
+        an index range on the CS-series, 0.1 dB units on the Zelux."""
+        return self.commands.limits("gain")
+
+    @property
+    def black_level(self) -> int:
+        """Black-level offset, in the camera's own units. Zelux only -- raises
+        ``CommandError`` on the CS-series, which has no ``blklvl``."""
+        return self.commands.get_black_level()
+
+    @black_level.setter
+    def black_level(self, value: int) -> None:
+        self.commands.set_black_level(value)
+
+    @property
+    def black_level_range(self) -> tuple[int, int]:
+        """Current (min, max) for ``black_level``. Zelux only; see ``black_level``."""
+        return self.commands.limits("blklvl")
+
+    @property
+    def bit_depth(self) -> int:
+        """Bits per pixel the sensor reports (10 on both families)."""
+        return self.commands.get_pixel_bit_depth()
 
     @property
     def frames_per_trigger_zero_for_unlimited(self) -> int:
@@ -146,6 +236,11 @@ class TsiCamera:
         self.commands.set_frames_per_trigger(value)
 
     @property
+    def frames_per_trigger_range(self) -> tuple[int, int]:
+        """Current (min, max) for ``frames_per_trigger_zero_for_unlimited``."""
+        return self.commands.limits("nframes")
+
+    @property
     def roi(self) -> tuple[int, int, int, int]:
         """ROI as (x0, y0, x1, y1) in sensor pixels, both corners inclusive."""
         return self.commands.get_roi()
@@ -155,9 +250,68 @@ class TsiCamera:
         self.commands.set_roi(*box)
 
     @property
+    def roi_range(self) -> tuple[tuple[int, int, int, int], tuple[int, int, int, int]]:
+        """(min box, max box) for ``roi``, each an (x0, y0, x1, y1) inclusive box."""
+        return self.commands.get_roi_range()
+
+    @property
+    def binx(self) -> int:
+        """Horizontal binning factor; 1 on cameras without on-camera binning (the Zelux
+        bins on the host instead). Set *before* ``roi`` -- see ``commands.set_binx``."""
+        return self.commands.get_binx()
+
+    @binx.setter
+    def binx(self, value: int) -> None:
+        self.commands.set_binx(value)
+
+    @property
+    def binx_range(self) -> tuple[int, int]:
+        """Current (min, max) for ``binx``. (1, 1) on cameras without on-camera binning."""
+        try:
+            return self.commands.limits("hbin")
+        except CommandError:
+            return 1, 1
+
+    @property
+    def biny(self) -> int:
+        """Vertical binning factor; 1 on cameras without on-camera binning. See ``binx``."""
+        return self.commands.get_biny()
+
+    @biny.setter
+    def biny(self, value: int) -> None:
+        self.commands.set_biny(value)
+
+    @property
+    def biny_range(self) -> tuple[int, int]:
+        """Current (min, max) for ``biny``. (1, 1) on cameras without on-camera binning."""
+        try:
+            return self.commands.limits("vbin")
+        except CommandError:
+            return 1, 1
+
+    @property
     def image_size(self) -> tuple[int, int]:
         """(width, height) of the decoded image, after ROI and binning."""
         return self.commands.get_image_size()
+
+    @property
+    def image_width_pixels(self) -> int:
+        """Width of the decoded image, after ROI and binning. See ``image_size``."""
+        return self.image_size[0]
+
+    @property
+    def image_height_pixels(self) -> int:
+        """Height of the decoded image, after ROI and binning. See ``image_size``."""
+        return self.image_size[1]
+
+    @property
+    def is_armed(self) -> bool:
+        """Whether ``arm()`` has been called without a matching ``disarm()``.
+
+        Host-side state, mirrored from the sequence this driver itself drove -- not a fresh
+        query of the camera's own ``state``.
+        """
+        return self._armed
 
     # -- streaming ---------------------------------------------------------
 
@@ -291,6 +445,46 @@ class TsiCamera:
             # shape, not a lost stream position: the next frame comes from the queue already
             # aligned, so there is nothing to resynchronise and the run continues.
             raise StreamDesyncError(str(exc)) from exc
+
+
+def discover_available_cameras(pid: int | None = None) -> list[tuple[int, str, str]]:
+    """List every connected TSI camera as (pid, serial_number, model).
+
+    There is no cheaper way to get a serial number than this: nothing else in this driver
+    reads the USB string descriptors, and the only place a serial is ever known is over the
+    ASCII command channel -- the same ``sernum`` round trip ``TsiCameraTransport.open()``
+    already does when it is asked to find one specific camera by serial. This function does
+    that for every matching device instead of stopping at the first one, and releases each
+    interface again before moving to the next, so nothing is left claimed on return.
+
+    A camera already claimed by another process or session is skipped rather than raising --
+    multi-camera discovery should not fail just because one candidate is busy.
+    """
+    found: list[tuple[int, str, str]] = []
+    candidates = [
+        dev
+        for dev in usb.core.find(find_all=True, idVendor=VID)
+        if dev.idProduct == pid or (pid is None and dev.idProduct in KNOWN_PIDS)
+    ]
+    for dev in candidates:
+        transport = None
+        try:
+            usb.util.claim_interface(dev, 0)
+            transport = TsiCameraTransport(dev)
+            serial = transport.command("sernum")
+            model = transport.command("model")
+            found.append((dev.idProduct, serial, model))
+        except usb.core.USBError:
+            continue
+        finally:
+            if transport is not None:
+                transport.close()
+            else:
+                try:
+                    usb.util.dispose_resources(dev)
+                except Exception:
+                    pass
+    return found
 
 
 def _frame_count_of(data: bytes) -> int | None:

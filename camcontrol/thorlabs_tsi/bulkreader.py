@@ -24,11 +24,53 @@ import ctypes
 import threading
 from ctypes import POINTER, c_int, c_long, c_ubyte, c_void_p, cast
 
+import usb
+import usb.backend.libusb1 as _libusb1
 import usb.core
 from usb.backend.libusb1 import (  # noqa: E402  -- private, but the only way to share a handle
     _libusb_transfer,
     _libusb_transfer_cb_fn_p,
 )
+
+# _libusb_transfer's field layout and _libusb_transfer_cb_fn_p's signature are pyusb
+# internals, not public API -- there is no supported way to submit a permanently-in-flight
+# transfer through pyusb's own (synchronous) surface, so this module reaches past it (see
+# the module docstring). Nothing pins pyusb from renaming or reshaping either one on a
+# future release, and if that happens this module must fail loudly at import time -- with
+# the installed version named -- rather than segfault inside a ctypes callback the first
+# time a frame arrives. This checks only the fields _make_transfer()/_complete() actually
+# set or read; ``dev._ctx``'s shape (also private) can only be checked against a real
+# opened device, so that half of the guard lives in AsyncBulkReader.__init__ instead.
+_REQUIRED_TRANSFER_FIELDS = {
+    "dev_handle",
+    "flags",
+    "endpoint",
+    "type",
+    "timeout",
+    "status",
+    "length",
+    "actual_length",
+    "callback",
+    "buffer",
+    "num_iso_packets",
+}
+
+
+def _require_supported_backend() -> None:
+    fields = {name for name, _ctype in _libusb_transfer._fields_}
+    missing = _REQUIRED_TRANSFER_FIELDS - fields
+    if missing or not callable(_libusb_transfer_cb_fn_p):
+        raise RuntimeError(
+            f"pyusb {usb.__version__}'s usb.backend.libusb1 internals no longer match what "
+            "tsi_camera.bulkreader expects (missing _libusb_transfer fields: "
+            f"{sorted(missing) or 'callback type not callable'}). This module depends on "
+            "pyusb's private libusb1 backend layout to keep bulk transfers permanently in "
+            "flight; pin pyusb to a tested version (see pyproject.toml) or update this "
+            "guard together with the code that relies on it."
+        )
+
+
+_require_supported_backend()
 
 _TRANSFER_TYPE_BULK = 2
 
@@ -89,10 +131,18 @@ class AsyncBulkReader:
         self._on_data = on_data
         self._on_error = on_error
 
-        ctx = dev._ctx
-        self._lib = ctx.backend.lib
-        self._ctx = ctx.backend.ctx
-        self._handle = ctx.handle.handle
+        try:
+            ctx = dev._ctx
+            self._lib = ctx.backend.lib
+            self._ctx = ctx.backend.ctx
+            self._handle = ctx.handle.handle
+        except AttributeError as exc:
+            raise RuntimeError(
+                f"pyusb {usb.__version__}'s usb.core.Device no longer exposes the private "
+                "._ctx.backend.lib/.ctx/.handle.handle chain tsi_camera.bulkreader shares a "
+                "libusb handle through. Pin pyusb to a tested version (see pyproject.toml) "
+                "or update this class together with the internals it depends on."
+            ) from exc
 
         self._declare_prototypes()
 
@@ -169,9 +219,11 @@ class AsyncBulkReader:
         # owned. Completions raised before the thread starts are queued by libusb, so
         # submitting first loses nothing.
         submitted = 0
+        first_failure_rc = 0
         for ptr, _buf in list(self._transfers.values()):
             rc = self._lib.libusb_submit_transfer(ptr)
             if rc != 0:
+                first_failure_rc = rc
                 break
             submitted += 1
         with self._lock:
@@ -180,7 +232,24 @@ class AsyncBulkReader:
         if submitted == 0:
             self._running = False
             self._free_all()
-            raise usb.core.USBError("no bulk transfer could be submitted")
+            if first_failure_rc == _libusb1.LIBUSB_ERROR_NO_MEM:
+                # Linux caps how much DMA-able memory usbfs will pin across every process
+                # on the system (usbfs_memory_mb) -- this reader asks for
+                # num_transfers * transfer_size permanently, and libusb_submit_transfer
+                # returns exactly this code, no more specific, when that cap is hit. macOS
+                # and Windows have no equivalent limit, so this only fires on Linux.
+                raise usb.core.USBError(
+                    "no bulk transfer could be submitted: libusb reported LIBUSB_ERROR_NO_MEM "
+                    "-- on Linux this means the usbfs_memory_mb cap was hit. Check "
+                    "/sys/module/usbcore/parameters/usbfs_memory_mb and raise it, e.g. "
+                    "`echo 0 | sudo tee /sys/module/usbcore/parameters/usbfs_memory_mb` "
+                    "(0 = unlimited) -- see README.md's Linux section for how to make that "
+                    "persist across reboots. This reader needs "
+                    f"{self._num_transfers * self._size} bytes in flight."
+                )
+            raise usb.core.USBError(
+                f"no bulk transfer could be submitted (libusb error {first_failure_rc})"
+            )
 
         self._thread = threading.Thread(
             target=self._run_events, name="tsi-usb-events", daemon=True

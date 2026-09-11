@@ -78,6 +78,10 @@ class Commands:
         """The camera's firmware version string."""
         return self._transport.command("ver")
 
+    def get_name(self) -> str:
+        """The camera's user-assigned display name (set via ThorCam; read-only here)."""
+        return self._transport.command("name")
+
     # -- exposure and timing -----------------------------------------------
 
     def get_exposure_us(self) -> int:
@@ -109,6 +113,17 @@ class Commands:
     def set_frame_period_us(self, period_us: int) -> int:
         """Set the frame period in microseconds; frame-rate control must be on."""
         return int(self._transport.command(f"sfr {int(period_us)}"))
+
+    def get_sensor_readout_time_ns(self) -> int:
+        """Sensor readout time.
+
+        Named ``_ns`` to match the vendor SDK's own ``sensor_readout_time_ns`` property,
+        which passes ``tl_camera_get_sensor_readout_time``'s value through unmodified -- but
+        no recorded capture annotates a ``sensor_readout_time`` read, so that unit is
+        inherited from the vendor's naming convention, not independently confirmed against
+        this firmware. See protocol.md's open questions.
+        """
+        return int(self._transport.command("sensor_readout_time"))
 
     # -- gain and level ----------------------------------------------------
 
@@ -175,27 +190,62 @@ class Commands:
         a, b, c, d = (int(v) for v in response.split())
         return a, b, c, d
 
-    def get_binning(self) -> tuple[int, int]:
-        """(horizontal, vertical) binning; (1, 1) on cameras without on-camera binning.
+    def get_roi_range(
+        self,
+    ) -> tuple[tuple[int, int, int, int], tuple[int, int, int, int]]:
+        """(min box, max box) for set_roi(), each an (x0, y0, x1, y1) inclusive box.
 
-        Only the CS-series bins in hardware. The Zelux has no ``hbin``/``vbin`` at all --
-        ThorCam bins Zelux images on the host.
+        Unlike limits(), which assumes a single numeric value, ``roi.min``/``roi.max`` each
+        answer with all four corner values at once -- e.g. ``roi.min`` reads ``"0 0 15 1"``
+        on a CS135MU (minimum ROI 16x2, agreeing with its 16-pixel width quantisation).
+        """
+        x0, y0, x1, y1 = (
+            int(v) for v in self._transport.command("roi" + MIN_SUFFIX).split()
+        )
+        lo = (x0, y0, x1, y1)
+        x0, y0, x1, y1 = (
+            int(v) for v in self._transport.command("roi" + MAX_SUFFIX).split()
+        )
+        hi = (x0, y0, x1, y1)
+        return lo, hi
+
+    def get_binx(self) -> int:
+        """Horizontal binning factor; 1 on cameras without on-camera binning.
+
+        Only the CS-series bins in hardware. The Zelux has no ``hbin`` at all -- ThorCam
+        bins Zelux images on the host -- so this returns 1 there rather than raising.
         """
         try:
-            return (
-                int(self._transport.command("hbin")),
-                int(self._transport.command("vbin")),
-            )
+            return int(self._transport.command("hbin"))
         except CommandError:
-            return 1, 1
+            return 1
+
+    def set_binx(self, horizontal: int) -> int:
+        """Set horizontal binning; returns the value actually applied. Set this *before*
+        the ROI: the camera trims the ROI to a whole multiple of the bin factor."""
+        return int(self._transport.command(f"hbin {int(horizontal)}"))
+
+    def get_biny(self) -> int:
+        """Vertical binning factor; 1 on cameras without on-camera binning. See get_binx()."""
+        try:
+            return int(self._transport.command("vbin"))
+        except CommandError:
+            return 1
+
+    def set_biny(self, vertical: int) -> int:
+        """Set vertical binning; returns the value actually applied. Set this *before*
+        the ROI: the camera trims the ROI to a whole multiple of the bin factor (1024 rows
+        at vbin 5 becomes 1020)."""
+        return int(self._transport.command(f"vbin {int(vertical)}"))
+
+    def get_binning(self) -> tuple[int, int]:
+        """(horizontal, vertical) binning; (1, 1) on cameras without on-camera binning."""
+        return self.get_binx(), self.get_biny()
 
     def set_binning(self, horizontal: int, vertical: int) -> tuple[int, int]:
         """Set binning. Set this *before* the ROI: the camera trims the ROI to a whole
         multiple of the bin factor (1024 rows at vbin 5 becomes 1020)."""
-        return (
-            int(self._transport.command(f"hbin {int(horizontal)}")),
-            int(self._transport.command(f"vbin {int(vertical)}")),
-        )
+        return self.set_binx(horizontal), self.set_biny(vertical)
 
     def get_image_size(self) -> tuple[int, int]:
         """Output image size in pixels, after ROI and binning -- the size of the array a
