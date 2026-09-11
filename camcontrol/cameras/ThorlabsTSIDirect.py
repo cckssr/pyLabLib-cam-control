@@ -20,6 +20,7 @@ from pylablib.thread.devices.generic.camera import GenericCameraThread
 from ..gui import cam_gui_parameters
 from ..gui.base_cam_ctl_gui import GenericCameraSettings_GUI, GenericCameraStatus_GUI
 from ..thorlabs_tsi.camera import TsiCamera, discover_available_cameras
+from ..thorlabs_tsi.protocol import CommandError
 from ..thorlabs_tsi.transport import StreamDesyncError
 from .base import ICameraDescriptor
 
@@ -63,6 +64,16 @@ class ThorlabsTSICamera(cam_iface.IROICamera, cam_iface.IExposureCamera):
             self._tsi = TsiCamera.open_camera(pid=self.pid, serial=self.serial)
             self.serial = self._tsi.serial_number
             self.pid = self._tsi.transport.pid
+            # ThorCam's own connect sequence starts with an unconditional `stop`
+            # (protocol.md's "Init/configure/stream sequence"). Without it, a camera left
+            # "running" by an earlier crashed/killed session/process answers the first
+            # roi/exposure change with "Camera Running" and connect throws --
+            # acquisition_in_progress() only tracks this object's own poll thread, so it has
+            # no way to know the hardware was already running before this object existed.
+            try:
+                self._tsi.commands.stop()
+            except CommandError:
+                pass
 
     def close(self):
         if self._tsi is not None:
