@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pylablib-cam-control"
-version = "2.2.1"
+version = "2.3.0"
 description = "GUI application for controlling and streaming from scientific cameras, built on pylablib"
 readme = "README.rst"
 license = { text = "GPL-3.0-or-later" }

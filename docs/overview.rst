@@ -8,11 +8,27 @@ Overview
 Installation
 ------------------------- 
 
-Download the zip file with the `latest release <https://github.com/AlexShkarin/pylablib-cam-control/releases/latest/download/cam-control.zip>`__ and unpack it to the desired location. The software comes with its own isolated Python interpreter with all the basic packages installed, so no additional installations are necessary. Download links to older version are available on the :ref:`release history <changelog>` page.
+Cam-control is a Python package (Python 3.12 or newer). Install it into a virtual environment from a checkout of the repository::
 
-To run the software, simply execute ``control.exe``. On the first run it will suggest to either load settings file (``settings.cfg``) from the previous version, or to detect all connected supported cameras and store their connection parameters. Make sure that at this point all cameras are connected, turned on, and not used in any other software (e.g., Andor Solis, Hokawo, or NI MAX). If new cameras are added to the PC, they can be re-discovered by running ``detect.exe``.
+    python -m venv .venv
+    .venv/bin/pip install -e .                  # on Windows: .venv\Scripts\pip install -e .
+    .venv/bin/pip install -e ".[thorlabs-tsi]"  # optional: direct-USB Thorlabs TSI cameras
 
-If only one camera is found, running ``control.exe`` will automatically connect to it. Otherwise, a dropdown menu will show up allowing selection of specific cameras.
+This installs three commands:
+
+- ``cam-control``: the application (with a splash screen); equivalent to ``python -m camcontrol``.
+- ``cam-control-console``: the application without the splash screen, reporting errors on the console.
+- ``cam-control-detect``: camera autodetection, which writes the found cameras into ``settings.cfg``.
+
+The settings file (``settings.cfg``), the stored GUI state (``defaults.cfg``, ``locals.cfg``) and the logs (``logout.txt``, ``logerr.txt``) are all looked up in the **current working directory**, so run the commands from the folder where you keep the configuration of your setup.
+
+On the first run without a settings file, the software suggests to either import a settings file (``settings.cfg``) from a previous version, or to detect all connected supported cameras and store their connection parameters. Make sure that at this point all cameras are connected, turned on, and not used in any other software (e.g., Andor Solis, Hokawo, or NI MAX). If new cameras are added to the PC, they can be re-discovered by running ``cam-control-detect``.
+
+If only one camera is found, ``cam-control`` automatically connects to it. Otherwise, a dropdown menu shows up allowing selection of specific cameras.
+
+To try the software without any camera, use the :ref:`simulated or emulated cameras <thorlabs_mock>`.
+
+The Windows zip distribution of earlier versions (with a bundled interpreter and ``control.exe``) is built by ``pack.py``; it has not been re-validated since the move to the ``camcontrol`` package.
 
 
 .. _overview_software_requirements:
@@ -24,7 +40,7 @@ Cam-control is built using `pylablib <https://github.com/AlexShkarin/pyLabLib/>`
 
 - Andor cameras: `Andor Solis <https://andor.oxinst.com/products/solis-software/>`__ or `Andor SKD <https://andor.oxinst.com/products/software-development-kit/>`__.
 - Hamamatsu/DCAM cameras: Hamamatsu-supplied software such as Hokawo, or the freely available `DCAM API <https://dcam-api.com/downloads/>`__. Keep in mind, that you also need to install the drivers for the corresponding camera type (USB, Ethernet, IEEE 1394). These drivers are in the same installer, but need to be installed separately.
-- Thorlabs uc480 and Thorlabs scientific imaging cameras: freely available `ThorCam <https://www.thorlabs.com/software_pages/ViewSoftwarePage.cfm?Code=ThorCam>`__ software (no older than v3.5.0 for the scientific imaging cameras).
+- Thorlabs uc480 and Thorlabs scientific imaging cameras: freely available `ThorCam <https://www.thorlabs.com/software_pages/ViewSoftwarePage.cfm?Code=ThorCam>`__ software (no older than v3.5.0 for the scientific imaging cameras). Zelux and Kiralux/Quantalux CS-series cameras can alternatively be used without any vendor software through the :ref:`direct-USB backend <thorlabs_tsi>`.
 - IDS uEye cameras: freely available (upon registration) `IDS Software Suite <https://en.ids-imaging.com/ids-software-suite.html>`__.
 - PCO cameras: freely available `pco.camware <https://www.pco.de/software/camera-control-software/pcocamware/>`__ software.
 - IMAQdx cameras: all the necessary code is contained in the freely available `Vision Acquisition Software <https://www.ni.com/en-us/support/downloads/drivers/download.vision-acquisition-software.html>`__. However, the IMAQdx part of the software is proprietary, and needs to be purchased to use.
@@ -41,7 +57,7 @@ Cam-control is built using `pylablib <https://github.com/AlexShkarin/pyLabLib/>`
   - Second, you have to download manufacturer-provided `BitFlow Python 3.8 package <https://www.bitflow.com/downloads/BFPython38_Release.zip>`__, extract ``BFModule-1.0.1-cp38-cp38-win_amd64.whl`` file from there to the ``python`` folder within ``cam-control`` (it should contain files like ``python.exe``), and run ``install-dependencies.bat`` script contained in the same folder.
   - Next, you need to specify the correct camera file for your camera using ``SysReg`` utility located in the ``Bin64`` folder of your BitFlow installation (by default, ``C:\BitFlow SDK 6.5\Bin64``).
   - Afterwards, you should copy this camera file into the main ``cam-control`` folder (it should contain files like ``settings.cfg``). The camera file is located in ``Config\Axn`` folder within the BitFlow installation (by default, ``C:\BitFlow SDK 6.5\Config\Axn``) and has ``.bfml`` extension, e.g., ``PhotonFocus-MV1-D1024E-160-CL.bfml``.
-  - You can now search for the cameras by running either ``control.exe`` for the first time, or ``detect.exe`` at any point.
+  - You can now search for the cameras by running either ``cam-control`` for the first time, or ``cam-control-detect`` at any point.
 
 .. note::
 
@@ -74,17 +90,15 @@ General layout
 
 .. image:: overview.png
 
-The window is split into two parts. The left half shows the images, possibly with several tabs to show several different kinds of images (e.g., if filters are used). The right half controls data saving, shows camera status (in the middle column), and has additional controls for camera, on-line processing, or additional plugins (rightmost column).
+The image takes the center of the window; all controls are in panels ("docks") around it: ``Camera``, ``Processing`` (with the plugin controls) and ``Image`` on the right, ``Saving`` and ``Status`` below them, and the ``Time series`` plot under the image while it is enabled. Every panel can be moved, stacked into tabs, detached into its own window, or closed (and reopened in the ``View`` menu); the layout is remembered between runs, and ``View`` -> ``Reset layout`` restores the default one. The toolbar and the ``Camera`` menu hold the most frequent actions, and the status bar at the bottom shows the camera state, frame rates, saving progress and the pixel value under the mouse cursor.
 
-The acquisition is started by pressing ``Start acquisition`` button. Note that you might need to adjust camera parameters (e.g., specify exposure, ROI, binning, pixel readout rate) to get reasonable image quality and performance.
+The acquisition is started by pressing ``Start acquisition`` (or ``Ctrl+Space``). Note that you might need to adjust camera parameters (e.g., specify exposure, ROI, binning, pixel readout rate) to get reasonable image quality and performance.
 
 All of the entered values are automatically saved on exit and restored on the next restart. It is also possible to :ref:`save the settings to a file <interface_footer>` and load them later, which is helpful for working in several different regimes.
 
-You can find more information either on the :ref:`interface page <interface>`, or in the built-in :ref:`tutorial <interface_tutorial>`.
+You can find more information on the :ref:`interface page <interface>`.
 
-.. image:: overview_compact.png
-
-In case the interface takes too much space and does not fit in the screen, you can enable the compact mode in the :ref:`preferences <interface_preferences>`.
+With the ``Compact interface`` option in the :ref:`preferences <interface_preferences>`, all right-hand panels share a single tab group, which leaves more room for the image.
 
 The software uses a dark color theme by default. You can change it in the :ref:`preferences <interface_preferences>`.
 
@@ -93,4 +107,4 @@ The software uses a dark color theme by default. You can change it in the :ref:`
 Support and feedback
 -------------------------
 
-If you have any issues, suggestions, or feedback, you can either raise an issue on GitHub at https://github.com/SandoghdarLab/pyLabLib-cam-control/issues, or send an e-mail to pylablib@gmail.com.
+If you have any issues, suggestions, or feedback, you can either raise an issue on GitHub at https://github.com/AlexShkarin/pylablib-cam-control/issues, or send an e-mail to pylablib@gmail.com.

@@ -4,14 +4,38 @@ Detailed interface description
 ==============================
 
 
-.. _interface_tutorial:
+.. _interface_main_window:
 
-Tutorial
+Main window
 -------------------------
 
-.. image:: interface_tutorial.png
+.. image:: overview.png
 
-The first time you start the software, you are greeted with the tutorial. It walks you through the interface and the basic concepts. It is recommended that you take it at some point to get familiar with all of the software capabilities. If you want to revisit it, you can find it under the :ref:`Extra button <interface_extras>`.
+The image is shown in the center of the window. All controls live in panels (docks) around it, which can be dragged to another side, stacked into tabs, detached into separate windows (double-click the panel title), or closed; the ``View`` menu reopens closed panels, and ``View`` -> ``Reset layout`` restores the default arrangement. The layout and window size are restored on the next start.
+
+The panels are:
+
+- ``Camera``: :ref:`camera settings <interface_camera_settings>`.
+- ``Processing``: :ref:`processing settings <interface_processing>` and the time series plot settings, and a tab per plugin (``Plugins``, and e.g. the filter controls).
+- ``Image``: colormap, :ref:`image display settings <interface_image_view>` and display update settings.
+- ``Saving`` and ``Status``: :ref:`saving control <interface_save_control>`, :ref:`camera status <interface_camera_status>` and :ref:`saving status <interface_save_status>`.
+- ``Time series``: the :ref:`time series plot <interface_time_plot>`; shown while the plot is enabled.
+
+The toolbar holds the most frequently used actions: ``Connect``/``Disconnect``, ``Start acquisition``/``Stop acquisition``, ``Snap`` (save the displayed frame), ``Record`` (start/stop saving), ``Auto levels`` and ``Fit view``. The status bar shows the camera connection and acquisition state (highlighted when disconnected; a camera error, e.g. an unplugged camera, is shown with its message as a tooltip), the camera and display frame rates, the saving progress, the coordinates and value of the pixel under the mouse cursor, and the :ref:`activity indicators <interface_activity>`.
+
+The image can be zoomed with the mouse wheel and moved by dragging. While zoomed, new frames keep the current view; ``Fit view`` (``Ctrl+0``) shows the whole image again. The colormap is selected in the ``Image`` panel.
+
+Keyboard shortcuts (also listed in ``Help`` -> ``Keyboard shortcuts``; ``Ctrl`` is ``Cmd`` on macOS):
+
+- ``Ctrl+Space``: start or stop acquisition
+- ``Ctrl+R``: start or stop saving
+- ``Ctrl+T``: snap the displayed frame
+- ``Ctrl+L``: toggle auto levels
+- ``Ctrl+0``: fit the image to the view
+- ``Ctrl+O`` / ``Ctrl+S``: load / save settings
+- the platform's full screen, preferences and quit shortcuts
+
+If a camera error occurs (e.g., the camera is unplugged), the acquisition stops, the camera is shown as disconnected, and the software keeps trying to reconnect it in the background; the rest of the application stays usable.
 
 .. _interface_camera_settings:
 
@@ -40,9 +64,9 @@ The settings and their exact behavior vary a bit between different cameras. Belo
 
 - ``Trigger mode`` (on ``Advanced`` tab): allows to set internal/external frame trigger.
 
-The acquisition process is controlled by ``Start Acquisition`` and ``Stop Acquisition`` buttons. At the start of the software, the camera is not acquiring frames.
+The acquisition process is controlled by ``Start Acquisition`` and ``Stop Acquisition`` buttons (also in the toolbar and the ``Camera`` menu). At the start of the software, the camera is not acquiring frames.
 
-Finally, ``Connect`` and ``Disconnect`` button control the camera connection. By default, the camera is connected on startup. However, if it is temporarily required in some other software, it can be disconnected, and then re-connected again.
+Finally, ``Connect`` and ``Disconnect`` buttons control the camera connection. By default, the camera is connected on startup. However, if it is temporarily required in some other software, it can be disconnected, and then re-connected again.
 
 .. _interface_camera_attributes:
 
@@ -100,11 +124,11 @@ The image control is based on `pyqtgraph <http://www.pyqtgraph.org/>`_ ``ImageVi
 - ``Binning``, ``Background subtraction``, ``Filter`` (above the image): quick overview of all processing steps for the displayed frame
 - ``Image size``: displays image size in pixels
 - ``Flip X``, ``Flip Y``, ``Transpose``: correspondingly, flips the image along the given axis, or transposes it (flips along the diagonal); note that these settings only affect display, and do not change the way images are saved
-- ``Normalize``: controls whether the image levels are automatically normalized to cover the full image range, or if they stay fixed
-- ``Min``, ``Max``: minimal and maximal intensity levels, if ``Normalize`` is off
-- ``Save preset``, ``Load preset``: it is possible to store a single "preset" combination of intensity levels and recall them later; can be used to, e.g., temporarily switch to the ``Normalize`` mode to assess the whole image, but then quickly switch back to the previously used levels
+- ``Auto levels`` (``Normalize`` in earlier versions): controls whether the image levels are automatically normalized to cover the full image range, or if they stay fixed
+- ``Min``, ``Max``: minimal and maximal intensity levels, if ``Auto levels`` is off
+- ``Save preset``, ``Load preset``: it is possible to store a single "preset" combination of intensity levels and recall them later; can be used to, e.g., temporarily switch to the ``Auto levels`` mode to assess the whole image, but then quickly switch back to the previously used levels
 - ``Show histogram``: controls whether the image value histogram on the right is shown; turning it off gives more space to the image and somewhat improves the update rate
-- ``Auto histogram range``: controls whether the histogram plot is rescaled with every new frame; this is different from the ``Normalize`` option, which control whether the image level range (shown with a transparent box in the histogram) gets similarly rescaled
+- ``Auto histogram range``: controls whether the histogram plot is rescaled with every new frame; this is different from the ``Auto levels`` option, which control whether the image level range (shown with a transparent box in the histogram) gets similarly rescaled
 - ``Show lines``: controls whether the green cross is shown in the plot; it can be used to mark or extract positions of features in the image
 - ``Use <name> coordinates``: controls the coordinate system used for the lines. By default the included systems are ``Display`` (display image coordinates after applying flipping and rotations), ``Image`` (image coordinates, before flipping and rotations), and ``Frame`` (camera frame coordinates, which account for ROI and binning settings; only available in the ``Standard`` image display).
 - ``X``, ``Y``: enable or disable individual lines and control their positions in the specified coordinate system. The lines can also be moved in the plot, or centered to a given position with a double-click.
@@ -116,7 +140,9 @@ The image control is based on `pyqtgraph <http://www.pyqtgraph.org/>`_ ``ImageVi
 - ``Display update period``: maximal image update period. Can be increased if the software is to laggy, e.g., if large frames or large data rates are used.
 - ``Display FPS``: actual display update frame rate.
 
-The colored gradient bar in the intensity histogram shows the current color scheme and allows to change it. It can be done either by right-clicking on it and selecting one of the presets, or manually adding, dragging, and changing color of the markers.
+The image can be zoomed with the mouse wheel and moved by dragging; ``Fit view`` (toolbar, ``View`` menu, ``Ctrl+0``, or the ``Fit image to view`` button) shows the whole image again. The value of the pixel under the mouse cursor is shown in the status bar, in the same (display) coordinates as the lines.
+
+The ``Colormap`` selector in the ``Image`` panel picks the color scheme. The colored gradient bar in the intensity histogram shows the current color scheme and allows to adjust it. It can be done either by right-clicking on it and selecting one of the presets, or manually adding, dragging, and changing color of the markers.
 
 
 .. _interface_save_control:
@@ -175,34 +201,28 @@ Activity overview
 
 .. image:: interface_activity.png
 
-In the upper right corner you can find indicators for the basic software activities: camera connection and acquisition, saving, background subtraction, filters, etc. These give a fast overview and help to, e.g., notices that some process is stopped (e.g., saving is done), or if it uses resources unnecessarily (e.g., running filters).
+In the right part of the status bar you can find indicators for the basic software activities: camera connection and acquisition, saving, background subtraction, filters, etc. These give a fast overview and help to, e.g., notices that some process is stopped (e.g., saving is done), or if it uses resources unnecessarily (e.g., running filters).
 
 
 .. _interface_footer:
 
-Settings saving and extras
+Settings saving
 --------------------------
 
-.. image:: interface_footer.png
-
-The small box in the lower right corner allows to save the application settings to a file and subsequently load them. This lets you quickly switch between several working modes. ``Loading scope`` selects the loaded settings scope: only camera settings, everything except for the camera, or all settings.
+``File`` -> ``Save settings...`` saves the application settings to a file, and ``File`` -> ``Load settings...`` loads them back. This lets you quickly switch between several working modes. ``File`` -> ``Settings loading scope`` selects the scope of the loaded settings: only camera settings, everything except for the camera, or all settings.
 
 If you want to only load some of the settings, you can manually edit saved settings files. It is a human-readable table, and the parameter names are relatively straightforward to decipher. Note that you can also load settings from the ``*_settings.dat`` file accompanying the saved data, as long as it was obtained using the same version of the software. This may be useful to make sure that you save the data with exactly the same parameters as before.
 
 
 .. _interface_extras:
 
-Extras
+Menus
 --------------------------
 
-.. image:: interface_extras.png
-
-The ``Extra...`` button in the :ref:`footer <interface_footer>` contains additional infrequently used features:
-
-- ``Tutorial``: interface and operation :ref:`tutorial <interface_tutorial>`, which automatically shows up during the first run of the software
-- ``Create camera shortcut``: if there are multiple cameras, this button allows to create a shortcut which connects to a particular camera. This skips the camera selection window on the application start and immediately runs the specific camera.
-- ``Preferences``: opens the :ref:`settings and preferences editor <interface_preferences>`.
-- ``About``: opens the ``About`` window with the version information and useful links.
+- ``File``: loading and saving settings, opening the saving folder, ``Create camera shortcut`` (Windows only; creates a shortcut which connects to a particular camera, skipping the camera selection window), :ref:`preferences <interface_preferences>`, and quitting.
+- ``Camera``: connecting/disconnecting, starting/stopping acquisition, snapping and recording.
+- ``View``: showing/hiding the panels and the toolbar, auto levels, fit view, full screen, and resetting the layout.
+- ``Help``: the list of keyboard shortcuts, opening the folder with the log files, and the ``About`` window with the version information and useful links.
 
 
 .. _interface_preferences:
@@ -212,9 +232,9 @@ Settings and preferences
 
 .. image:: interface_preferences.png
 
-The preferences window can be opened using the :ref:`Extras <interface_extras>` button. Here you can edit the general software settings. These cover all the same items as the :ref:`settings file <settings_file>`, but provides a user-friendly interface for editing these settings. This windows has several tabs. The first tab controls general settings, which affect all cameras by default. The other tabs (one per cameras) allow you override these settings for specific cameras (e.g., choose different color schemes for different cameras), as well as control some camera-specific settings. Here are the generic settings:
+The preferences window can be opened using ``File`` -> ``Preferences...``. Here you can edit the general software settings. These cover all the same items as the :ref:`settings file <settings_file>`, but provides a user-friendly interface for editing these settings. This windows has several tabs. The first tab controls general settings, which affect all cameras by default. The other tabs (one per cameras) allow you override these settings for specific cameras (e.g., choose different color schemes for different cameras), as well as control some camera-specific settings. Here are the generic settings:
 
-- ``Compact interface``: switche between the standard four-panel and the more compact three-panel layouts.
+- ``Compact interface``: put all right-hand panels into a single tab group instead of two.
 - ``Color theme``: select different interface and color therems (based of `qdarkstyle <https://github.com/ColinDuquesnoy/QDarkStyleSheet>`__).
 - ``Expandable text boxes``: enable or disable expandable text boxes for paths and event logs.
 - ``Add date/time file method``: method to generate file names when ``Add date/time`` is selected but ``Create separate folder`` is not. Can be ``Prefix`` (add date as a prefix, e.g., ``20210315_120530_video.bin``), ``Suffix`` (add date as a suffix, e.g., ``video_20210315_120530.bin``), or ``Folder`` (create folder with the datetime as name, e.g.,  ``20210315_120530/video.bin``).

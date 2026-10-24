@@ -41,4 +41,4 @@ Here we describe some basic use cases and applications of the cam-control softwa
 
     Cam-control allows for control of several connected cameras. If more than one camera is specified in the settings file (typically these are found by running the ``detect`` script), then every time the software is started, it allows to select which camera to control. Several instances can run simultaneously for different cameras without interference. The default GUI parameters are stored independently for all cameras.
 
-    The selection window can be avoided by creating a specific camera shortcut in the :ref:`extras menu <interface_extras>`. It creates a shortcut which uses the ``--camera`` :ref:`argument <command_line>` (e.g., run ``control.exe --camera ppimaq_0``) to supply the specific camera name.
+    The selection window can be avoided by passing the camera name with the ``--camera`` :ref:`argument <command_line>` (e.g., ``cam-control --camera ppimaq_0``). On Windows, ``File`` -> ``Create camera shortcut`` creates a desktop shortcut that does this.

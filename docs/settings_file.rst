@@ -9,10 +9,10 @@ Configuring
 Command line arguments
 -------------------------
 
-``control.exe`` takes several command line arguments to customize the software launch sequence:
+``cam-control`` (and ``cam-control-console``, ``python -m camcontrol``) takes several command line arguments to customize the software launch sequence:
 
     - ``--camera <camera name>``, ``-c <camera name>``: select a specific camera to control; ``<camera name>`` is the name of the camera used within the settings file, such as ``ppimaq_0``. Normally, if several cameras are available, the software first shows the dropdown menu to choose the camera to control. However, if this argument is specified, this camera will be selected automatically. Can be used to, e.g., create separate shortcuts for controlling different cameras.
-    - ``--config-file <file>``, ``-cf <file>``: specify a configuration file if it is different from the default ``settings.cfg``. The path is always specified relative to ``control.py`` location.
+    - ``--config-file <file>``, ``-cf <file>``: specify a configuration file if it is different from the default ``settings.cfg``. A relative path is relative to the current working directory, which is also where ``defaults.cfg``, ``locals.cfg`` and the log files are kept.
 
 
 
@@ -21,7 +21,7 @@ Command line arguments
 Settings file
 -------------------------
 
-Software settings are defined in ``settings.cfg`` file inside the main folder. These include the camera connection parameters, as well as some additional interface and camera settings. The settings are described in a plain text format with one parameter per row. The most important settings are either defined by default, do not need explicit definition, or filled in by the camera detection. However, you can also edit them manually. Below is the list of available parameters.
+Software settings are defined in the ``settings.cfg`` file in the working directory. These include the camera connection parameters, as well as some additional interface and camera settings. The settings are described in a plain text format with one parameter per row. The most important settings are either defined by default, do not need explicit definition, or filled in by the camera detection. However, you can also edit them manually. Below is the list of available parameters.
 
 .. _settings_file_general:
 
@@ -29,7 +29,7 @@ General parameters
 -------------------------
 
 ``interface/compact``
-    | Switch to compact three-panel layout with a smaller controls area.
+    | Put all right-hand panels (camera, processing, image, saving, status) into a single tab group, leaving more room for the image.
     | *Values*: ``True``, ``False``
     | *Default*: ``False``
 

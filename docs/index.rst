@@ -13,7 +13,7 @@ Features:
 - Customization using :ref:`user-defined filters <expanding_filter>` (simple Python code operating on numpy arrays) or control from other software via a :ref:`TCP/IP interface <expanding_server>`.
 - Flexible data acquisition: :ref:`pre-trigger buffering <pipeline_saving_pretrigger>`, initiating acquisition on :ref:`timer, specific image property <advanced_save_trigger>`, or :ref:`external software signals <expanding_server>`.
 
-To install cam-control, download the latest version from `GitHub <https://github.com/AlexShkarin/pylablib-cam-control/releases/latest/download/cam-control.zip>`__ as a self-contained Zip file and then follow further :ref:`instructions <overview_install>` for how to run it.
+To install cam-control, follow the :ref:`installation instructions <overview_install>`.
 
 .. toctree::
    :maxdepth: 2
@@ -24,6 +24,7 @@ To install cam-control, download the latest version from `GitHub <https://github
    pipeline
    advanced
    interface
+   thorlabs
    expanding
    settings_file
    usecases

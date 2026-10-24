@@ -50,7 +50,7 @@ Troubleshooting
 
 - **Control window is too large and does not fit into the screen**
   
-  - You can enable the compact mode in the :ref:`setting file <settings_file_general>`.
+  - Close or tab together the panels you don't need (``View`` menu), or enable the compact mode in the :ref:`setting file <settings_file_general>`, which puts all right-hand panels into one tab group.
 
 - **Camera performance is lower than can be achieved in the native software**
 

@@ -78,7 +78,7 @@ needed only for the `ThorlabsTSIDirect` camera backend — see below.
 
 ```
 camcontrol/
-  __init__.py       # version = "2.2.1", compare_version()
+  __init__.py       # version = "2.3.0" (must stay X.Y.Z: compare_version), compare_version()
   __main__.py        # `python -m camcontrol` -> splash.main()
   app.py              # main window, thread wiring (formerly control.py)
   detect.py           # camera autodetection CLI
@@ -291,12 +291,18 @@ ships these files with the wheel.
 ## Known rough edges (not yet fixed)
 
 - `pack.py`'s Windows packaging/build script (embedded-interpreter zip
-  distribution) has been patched to import cleanly on Python 3.12+ and to
-  reference the new `camcontrol/` layout, but its actual packaging output has
-  **not been validated end-to-end on Windows** since this restructuring —
-  treat it as needing a dedicated verification pass before relying on it. The
+  distribution): the launchers (`launcher/*.c`) and `detect-log-errors.cmd`
+  run `python -m camcontrol[.app|.detect]` with the `cam-control` folder as
+  working directory (where `settings.cfg` lives), and the copy filter excludes
+  `.venv`/`tests`/caches, but the packaging output has **not been validated
+  end-to-end on Windows** since the restructuring — needs a dedicated
+  verification pass before relying on it. The
   bundled `BFModule-1.0.1-cp38-cp38-win_amd64.whl` (`installdep.py`) is also
   still cp38-locked and vendor-supplied; unfixable from here.
+- The `docs/interface_*.png` screenshots predate the dock-based main window
+  (only `docs/overview.png` is current); `services/dev.py`'s
+  `take_screenshots` (dev utils, `_dev_utils_enabled`) regenerates them per
+  dock.
 - `plugins/server.py`'s control server, when enabled, accepts unauthenticated
   commands over TCP and uses peer-supplied `dtype`/`shape` to build a numpy
   array from the payload — bind to loopback or add auth before exposing it on

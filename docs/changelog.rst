@@ -3,6 +3,21 @@
 Release history
 ============================
 
+Version 2.3.0
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+2026-10-25 (fork of 2.2.1, installed as the ``camcontrol`` Python package)
+
+* Installable package with ``cam-control``, ``cam-control-console`` and ``cam-control-detect`` commands; requires Python 3.12 or newer, numpy 2.
+* New main window: dockable, rearrangeable panels with a remembered layout, menu bar, toolbar, status bar and keyboard shortcuts. The built-in tutorial was removed.
+* Image view: mouse zoom and pan, fit-to-view, pixel value readout, colormap selection.
+* Camera errors (e.g., an unplugged camera) no longer close the application: the camera is shown as disconnected and reconnected when possible.
+* Added a direct-USB backend for Thorlabs Zelux and CS-series cameras that needs no vendor software (frame rate, gain in dB, black level, binning, color demosaicing).
+* Added an emulated Thorlabs camera with fault injection, and a more realistic simulated camera (noise, gain, binning, patterns, triggering).
+* Fixed corrupted raw files when saving in 12-bit packed format for some frame widths, wrong saved-frame counts after write errors, and ``detect`` wiping the camera list when no cameras were found.
+
+|
+
 `Version 2.2.1 <https://github.com/AlexShkarin/pyLabLib-cam-control/releases/download/v2.2.1/cam-control.zip>`__
 ---------------------------------------------------------------------------------------------------------------------------------------------
 
