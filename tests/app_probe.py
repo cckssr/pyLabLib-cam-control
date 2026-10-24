@@ -10,7 +10,6 @@ Usage: python app_probe.py CONFIG_FILE CAMERA_NAME [ACQUIRE_SECONDS]
 import json
 import os
 import sys
-import time
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -28,25 +27,42 @@ def main():
     results = {}
     qapp = camapp.prepare_app()
 
-    def probe():
+    def finish():
         try:
-            cam = controller.sync_controller("camera")
-            results["connection"] = cam.v["status/connection"]
-            cam.ca.acq_start()
-            time.sleep(seconds)
-            results["frames_acquired"] = cam.v["frames/acquired"]
-            results["acquisition"] = cam.v["status/acquisition"]
-            cam.ca.acq_stop()
-            results["running_threads"] = sorted(controller._running_threads)
-        except Exception as exc:
-            results["error"] = repr(exc)
-        finally:
-            try:
-                controller.get_gui_controller().stop()
-            except threadprop.InterruptExceptionStop:
-                pass
+            controller.get_gui_controller().stop()
+        except threadprop.InterruptExceptionStop:
+            pass
 
-    QtCore.QTimer.singleShot(3000, probe)
+    def guarded(func):
+        def wrapped():
+            try:
+                func()
+            except Exception as exc:
+                results["error"] = repr(exc)
+                finish()
+
+        return wrapped
+
+    # Timer callbacks rather than sleeping, so the GUI thread (and with it the frame
+    # pipeline's GUI-side consumers) keeps running while frames are acquired
+    @guarded
+    def start():
+        cam = controller.sync_controller("camera")
+        results["connection"] = cam.v["status/connection"]
+        cam.ca.acq_start()
+        QtCore.QTimer.singleShot(int(seconds * 1000), measure)
+
+    @guarded
+    def measure():
+        cam = controller.sync_controller("camera")
+        results["frames_acquired"] = cam.v["frames/acquired"]
+        results["fps"] = cam.v["frames/fps"]
+        results["acquisition"] = cam.v["status/acquisition"]
+        cam.ca.acq_stop()
+        results["running_threads"] = sorted(controller._running_threads)
+        finish()
+
+    QtCore.QTimer.singleShot(3000, start)
     camapp.main(argv=["--config-file", config, "--camera", camera], app=qapp)
     sys.__stdout__.write(RESULT_PREFIX + json.dumps(results, default=str) + "\n")
 
