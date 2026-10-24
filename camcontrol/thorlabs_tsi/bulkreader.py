@@ -113,7 +113,11 @@ class AsyncBulkReader:
 
     ``on_error(status, name)`` is called for a failed transfer. Return True to keep the
     transfer in rotation, False to retire it; when every transfer has been retired the reader
-    stops.
+    stops, and ``on_exhausted()`` is called (from the event thread) unless that happened
+    because of ``stop()``.
+
+    Exceptions raised by ``on_data`` are counted in ``callback_errors`` (the most recent one
+    is kept in ``last_callback_error``) rather than propagated.
     """
 
     def __init__(
@@ -124,7 +128,11 @@ class AsyncBulkReader:
         num_transfers: int,
         on_data,
         on_error=None,
+        on_exhausted=None,
     ) -> None:
+        self._on_exhausted = on_exhausted
+        self.callback_errors = 0
+        self.last_callback_error: BaseException | None = None
         self._dev = dev
         self._endpoint = endpoint
         self._size = transfer_size
@@ -270,11 +278,16 @@ class AsyncBulkReader:
                 self._lib.libusb_cancel_transfer(ptr)
             except Exception:
                 pass
-        self._drained.wait(timeout)
+        drained = self._drained.wait(timeout)
         thread, self._thread = self._thread, None
         if thread is not None:
             thread.join(timeout)
-        self._free_all()
+        if drained:
+            self._free_all()
+        else:
+            # Some callback never came back, so libusb may still own those transfers; leaking
+            # them is the lesser evil compared with the use-after-free described above.
+            self._transfers.clear()
 
     def _free_all(self) -> None:
         """Free every allocated transfer. Only safe once libusb no longer owns any of them."""
@@ -304,6 +317,12 @@ class AsyncBulkReader:
                 self._ctx, ctypes.byref(tv), ctypes.byref(completed)
             )
         self._drained.set()
+        if self._running and self._on_exhausted is not None:
+            # Every transfer retired on its own (errors, device gone) -- not via stop().
+            try:
+                self._on_exhausted()
+            except Exception:
+                pass
 
     def _complete(self, ptr) -> None:
         """libusb completion callback. Runs on the event thread (or on whichever thread is
@@ -318,11 +337,12 @@ class AsyncBulkReader:
                 try:
                     buf = self._transfers[ctypes.addressof(t)][1]
                     self._on_data(memoryview(buf)[:n])
-                except Exception:
+                except Exception as exc:
                     # A consumer error must not strand the transfer: resubmitting below is
                     # what keeps the endpoint attended, and dropping out here would silently
                     # shrink the rotation until the stream stalled.
-                    pass
+                    self.callback_errors += 1
+                    self.last_callback_error = exc
         elif status == _TRANSFER_CANCELLED or not self._running:
             with self._lock:
                 self._live -= 1

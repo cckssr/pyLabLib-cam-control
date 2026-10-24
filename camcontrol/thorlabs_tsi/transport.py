@@ -27,6 +27,7 @@ from .protocol import (
     KNOWN_PIDS,
     USB_TIMEOUT_MS,
     VID,
+    CommandError,
     decode_command_frame,
     encode_command_frame,
     parse_response,
@@ -60,6 +61,9 @@ class TsiCameraTransport:
         # Overridable so callers can trade I/O-call count against read granularity; see
         # live_stream.py's --read-burst-bytes for a diagnostic use of this.
         self.read_burst_bytes = read_burst_bytes
+        # Set when a command's reply did not arrive in time: it may still turn up late, and
+        # must then be discarded instead of being taken as the answer to the next command.
+        self._reply_may_be_pending = False
 
     @classmethod
     def open(
@@ -68,6 +72,7 @@ class TsiCameraTransport:
         serial: str | None = None,
         read_burst_bytes: int = READ_BURST_BYTES,
         retry_seconds: float = 5.0,
+        find=None,
     ) -> TsiCameraTransport:
         """Open the first matching camera: claim interface 0 and start talking.
 
@@ -79,11 +84,14 @@ class TsiCameraTransport:
         without touching endpoint state; a genuinely wedged device surfaces as an error the
         caller can respond to with an explicit ``reset_device()`` rather than being papered
         over silently.
+
+        ``find`` replaces ``usb.core.find`` for locating candidate devices, e.g. to hand in
+        an emulated device (see ``fake.py``).
         """
         deadline = time.monotonic() + retry_seconds
         while True:
             try:
-                return cls._open_once(pid, serial, read_burst_bytes)
+                return cls._open_once(pid, serial, read_burst_bytes, find)
             except usb.core.USBError as exc:
                 if (
                     exc.errno not in _TRANSIENT_OPEN_ERRNOS
@@ -98,6 +106,7 @@ class TsiCameraTransport:
         pid: int | None,
         serial: str | None,
         read_burst_bytes: int,
+        find=None,
     ) -> TsiCameraTransport:
         """One attempt at open() -- both families share this transport.
 
@@ -113,9 +122,10 @@ class TsiCameraTransport:
         reports it, at the point of use (``command()``, ``read_frame_bytes()``,
         ``stream.FrameStream``). That is the only time clearing is both necessary and safe.
         """
+        find = usb.core.find if find is None else find
         candidates = [
             dev
-            for dev in usb.core.find(find_all=True, idVendor=VID)
+            for dev in find(find_all=True, idVendor=VID)
             if dev.idProduct == pid or (pid is None and dev.idProduct in KNOWN_PIDS)
         ]
         if not candidates:
@@ -137,7 +147,7 @@ class TsiCameraTransport:
                     return transport
 
                 found = transport.command("sernum")
-            except usb.core.USBError:
+            except (usb.core.USBError, CommandError):
                 # Don't leak this candidate's claim into open()'s retry loop above.
                 if transport is not None:
                     transport.close()
@@ -208,6 +218,9 @@ class TsiCameraTransport:
         * Only the write is retried after a stall. A read timeout is not retried, because
           the command may well have been executed; re-sending it would run it twice.
         """
+        if self._reply_may_be_pending:
+            self._drain_command_replies()
+            self._reply_may_be_pending = False
         last: usb.core.USBError | None = None
         for _attempt in range(3):
             try:
@@ -220,7 +233,13 @@ class TsiCameraTransport:
                 last = exc
                 self._recover_command_channel()
                 continue
-            frame = self.dev.read(CMD_IN_EP, COMMAND_FRAME_BYTES, timeout=timeout_ms)
+            try:
+                frame = self.dev.read(
+                    CMD_IN_EP, COMMAND_FRAME_BYTES, timeout=timeout_ms
+                )
+            except usb.core.USBTimeoutError:
+                self._reply_may_be_pending = True
+                raise
             return parse_response(command, decode_command_frame(bytes(frame)))
         raise last if last is not None else RuntimeError("unreachable")
 
@@ -231,6 +250,10 @@ class TsiCameraTransport:
                 self.dev.clear_halt(ep)
             except usb.core.USBError:
                 pass
+        self._drain_command_replies()
+
+    def _drain_command_replies(self) -> None:
+        """Discard every reply frame still queued on the command response endpoint."""
         while True:
             try:
                 if not len(self.dev.read(CMD_IN_EP, COMMAND_FRAME_BYTES, timeout=50)):

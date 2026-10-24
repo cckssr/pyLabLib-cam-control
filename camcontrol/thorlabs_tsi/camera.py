@@ -32,8 +32,13 @@ from .transport import StreamDesyncError, TsiCameraTransport
 
 
 class TsiCamera:
-    def __init__(self, transport: TsiCameraTransport) -> None:
+    def __init__(
+        self, transport: TsiCameraTransport, synchronous_stream: bool = False
+    ) -> None:
         self.transport = transport
+        # Read the image endpoint with a plain read loop instead of libusb async transfers;
+        # only meant for emulated devices (see ``fake.py``), which have no libusb handle.
+        self._synchronous_stream = synchronous_stream
         self.commands = Commands(transport)
         self._armed = False
         # Cached per-arm so a frame read doesn't cost a round trip per property.
@@ -51,6 +56,8 @@ class TsiCamera:
         pid: int | None = None,
         serial: str | None = None,
         read_burst_bytes: int | None = None,
+        find=None,
+        synchronous_stream: bool = False,
     ) -> TsiCamera:
         """Open the first matching camera.
 
@@ -58,11 +65,17 @@ class TsiCamera:
         keeps the default (see stream.READ_BURST_BYTES). Larger bursts mean fewer syscalls
         per frame; the reader thread makes this much less critical than it was when reads
         and decoding shared a thread.
+
+        ``find`` and ``synchronous_stream`` exist for emulated devices; see
+        ``TsiCameraTransport.open`` and ``__init__``.
         """
         kwargs = (
             {} if read_burst_bytes is None else {"read_burst_bytes": read_burst_bytes}
         )
-        return cls(TsiCameraTransport.open(pid, serial, **kwargs))
+        return cls(
+            TsiCameraTransport.open(pid, serial, find=find, **kwargs),
+            synchronous_stream=synchronous_stream,
+        )
 
     def close(self) -> None:
         """Stop the camera if it is running, then release the USB interface.
@@ -326,7 +339,17 @@ class TsiCamera:
         The endpoint is flushed *before* ``start``: whatever the previous session left behind
         would otherwise be handed to the first read of this one as the tail of somebody
         else's frame.
+
+        Frames-per-trigger is reset to 0 (continuous) first if a previous session left it
+        set, since a non-zero value would end this acquisition after that many frames.
         """
+        if self._armed or self._stream is not None:
+            raise RuntimeError("camera is already armed")
+        try:
+            if self.commands.get_frames_per_trigger() != 0:
+                self.commands.set_frames_per_trigger(0)
+        except CommandError:
+            pass  # not every firmware exposes nframes; nothing to reset then
         self._geometry = self.commands.get_image_size()
         self._calibration_lines = self.commands.get_calibration_lines()
         self._clock_hz = self.commands.get_timestamp_clock_hz()
@@ -337,19 +360,30 @@ class TsiCamera:
         )
 
         self.commands.arm()
-        self.transport.flush_data_endpoint()
-        self.commands.start()
+        # From here on the camera may be armed or running, so any failure must still send
+        # `stop` -- close() only does that while _armed is set.
         self._armed = True
-
-        self._stream = FrameStream(
-            self.transport.dev,
-            expected_chunks=expected_chunks,
-            frame_count_of=_frame_count_of,
-            read_burst_bytes=self.transport.read_burst_bytes,
-            queue_depth=max(1, frames_to_buffer),
-            tap=tap,
-        )
-        self._stream.start()
+        try:
+            self.transport.flush_data_endpoint()
+            self.commands.start()
+            stream = FrameStream(
+                self.transport.dev,
+                expected_chunks=expected_chunks,
+                frame_count_of=_frame_count_of,
+                read_burst_bytes=self.transport.read_burst_bytes,
+                queue_depth=max(1, frames_to_buffer),
+                synchronous=self._synchronous_stream,
+                tap=tap,
+            )
+            stream.start()
+            self._stream = stream
+        except BaseException:
+            try:
+                self.disarm()
+            except (usb.core.USBError, CommandError):
+                self._armed = False
+                self._geometry = None
+            raise
 
     def issue_software_trigger(self) -> None:
         """Start an acquisition on an armed camera.
@@ -425,11 +459,12 @@ class TsiCamera:
         ``decode_frame`` picks the one confirmed correct for this camera's own family (see
         ``frames.ORDER_BY_FAMILY``) rather than assuming one for every camera.
         """
+        geometry = self._geometry  # read once: disarm() on another thread clears it
         raw = self.get_pending_raw_frame(timeout)
-        if raw is None:
+        if raw is None or geometry is None:
             return None
 
-        width, height = self._geometry
+        width, height = geometry
         try:
             return decode_frame(
                 raw.data,
@@ -447,7 +482,9 @@ class TsiCamera:
             raise StreamDesyncError(str(exc)) from exc
 
 
-def discover_available_cameras(pid: int | None = None) -> list[tuple[int, str, str]]:
+def discover_available_cameras(
+    pid: int | None = None, find=None
+) -> list[tuple[int, str, str]]:
     """List every connected TSI camera as (pid, serial_number, model).
 
     There is no cheaper way to get a serial number than this: nothing else in this driver
@@ -458,12 +495,16 @@ def discover_available_cameras(pid: int | None = None) -> list[tuple[int, str, s
     interface again before moving to the next, so nothing is left claimed on return.
 
     A camera already claimed by another process or session is skipped rather than raising --
-    multi-camera discovery should not fail just because one candidate is busy.
+    multi-camera discovery should not fail just because one candidate is busy. The same goes
+    for one that refuses the identity queries (``CommandError``).
+
+    ``find`` replaces ``usb.core.find``, e.g. to hand in emulated devices (see ``fake.py``).
     """
+    find = usb.core.find if find is None else find
     found: list[tuple[int, str, str]] = []
     candidates = [
         dev
-        for dev in usb.core.find(find_all=True, idVendor=VID)
+        for dev in find(find_all=True, idVendor=VID)
         if dev.idProduct == pid or (pid is None and dev.idProduct in KNOWN_PIDS)
     ]
     for dev in candidates:
@@ -474,7 +515,7 @@ def discover_available_cameras(pid: int | None = None) -> list[tuple[int, str, s
             serial = transport.command("sernum")
             model = transport.command("model")
             found.append((dev.idProduct, serial, model))
-        except usb.core.USBError:
+        except (usb.core.USBError, CommandError):
             continue
         finally:
             if transport is not None:

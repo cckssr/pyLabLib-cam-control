@@ -33,6 +33,7 @@ from .protocol import (
     DATA_CHUNK_BYTES,
     DATA_IN_EP,
     parse_chunk_marker,
+    parse_frame_header,
 )
 
 # How much one dev.read() asks for (synchronous path only -- see ``synchronous`` below).
@@ -224,9 +225,33 @@ class ChunkAssembler:
         del buf[:drop]
         return False
 
+    def _continues_past_wrap(self, chunk: bytes) -> bool:
+        """Whether an index-0 chunk is chunk 256*k of the frame in progress, not a new frame.
+
+        The marker's index is a single byte, so a frame longer than 256 chunks (~4 MiB, e.g.
+        a CS505/CS895 at full sensor) numbers its 257th chunk 0 again. Only a frame still
+        short of ``expected_chunks`` whose next index is due to wrap can be continuing; it
+        is then told apart from a real frame start by the header: a CS continuation chunk
+        has no ``TSI`` metadata header, and a Zelux one repeats its own frame's counter.
+        """
+        if (
+            not self._chunks
+            or self._next_index is None
+            or self._next_index % 256 != 0
+            or len(self._chunks) >= self.expected_chunks
+        ):
+            return False
+        first = parse_frame_header(self._chunks[0][:256])
+        this = parse_frame_header(chunk[:256])
+        if first is None:
+            return False
+        if this is None or this["family"] != first["family"]:
+            return True
+        return this["frame_count"] == first["frame_count"]
+
     def _accept(self, index: int, chunk: bytes, out: list[RawFrame]) -> None:
         """Fold one recognized chunk into the frame in progress."""
-        if index == 0:
+        if index == 0 and not self._continues_past_wrap(chunk):
             # A new frame starts here, so whatever was in progress is over.
             self._settle_expected(len(self._chunks))
             self._flush(out, complete=len(self._chunks) == self.expected_chunks)
@@ -286,7 +311,7 @@ class ChunkAssembler:
         frame (see protocol.md, "The chunk-count prediction must only ever grow"), so a
         shorter run carries no information worth acting on.
         """
-        if 0 < chunk_count <= 256 and chunk_count > self.expected_chunks:
+        if chunk_count > self.expected_chunks:
             self.stats.expected_chunks_corrected += 1
             self.expected_chunks = chunk_count
 
@@ -360,6 +385,8 @@ class FrameStream:
         self._thread: threading.Thread | None = None
         self._error: BaseException | None = None
         self._last_frame_count: int | None = None
+        # Failed transfers since the last one that delivered data (async path).
+        self._consecutive_errors = 0
         self._last_data = time.monotonic()
         # Asynchronous by default: a synchronous read loop leaves DATA_IN_EP unattended
         # between calls, which a CS165CU answers by discarding the rest of the frame in
@@ -400,6 +427,7 @@ class FrameStream:
             num_transfers=NUM_TRANSFERS,
             on_data=self._on_data,
             on_error=self._on_transfer_error,
+            on_exhausted=self._on_reader_exhausted,
         )
         self._reader.start()
         # Transfers carry no timeout, so nothing else would ever notice an idle endpoint --
@@ -417,6 +445,7 @@ class FrameStream:
             self._tap(view)
         with self._assembly:
             frames = self._assembler.feed(view)
+        self._consecutive_errors = 0
         self._last_data = time.monotonic()
         for frame in frames:
             self._publish(frame)
@@ -426,15 +455,34 @@ class FrameStream:
         from .bulkreader import RECOVERABLE_STATUSES
 
         self._assembler.stats.read_errors += 1
+        self._consecutive_errors += 1
         if status not in RECOVERABLE_STATUSES:
             return False
         # Bytes were almost certainly lost, so the byte stream is no longer trustworthy at
         # its current offset; re-find a chunk boundary rather than assembling across the gap.
         with self._assembly:
             self._assembler.reset()
-        if self._assembler.stats.read_errors > _MAX_CONSECUTIVE_READ_ERRORS:
+        # Compare against failures *in a row*: the cumulative read_errors would eventually
+        # retire transfers on a long, healthy run that merely saw a few transient errors.
+        if self._consecutive_errors > _MAX_CONSECUTIVE_READ_ERRORS:
             return False
         return True
+
+    def _on_reader_exhausted(self) -> None:
+        """Every transfer has retired: nothing will ever arrive again, so say so instead of
+        letting ``next_frame`` time out forever."""
+        self._fail(
+            usb.core.USBError(
+                "image stream stopped: every bulk transfer on the data endpoint failed "
+                f"(read errors: {self._assembler.stats.read_errors})"
+            )
+        )
+
+    def _fail(self, exc: BaseException) -> None:
+        """Record the error that ended the reader and wake any waiting consumer."""
+        self._error = exc
+        with self._arrived:
+            self._arrived.notify_all()
 
     def _watch_idle(self) -> None:
         """Release a frame held for confirmation once the endpoint has gone quiet."""
@@ -517,7 +565,9 @@ class FrameStream:
                 # attended rather than treating silence as an error. An idle endpoint does
                 # mean any frame held for confirmation will get no successor, so release it
                 # now -- otherwise the last frame of an acquisition never arrives.
-                for frame in self._assembler.flush_ready():
+                with self._assembly:
+                    frames = self._assembler.flush_ready()
+                for frame in frames:
                     self._publish(frame)
                 continue
             except usb.core.USBError as exc:
@@ -530,7 +580,8 @@ class FrameStream:
                         self._dev.clear_halt(DATA_IN_EP)
                     except usb.core.USBError:
                         pass
-                    self._assembler.reset()
+                    with self._assembly:
+                        self._assembler.reset()
                 elif self._stop.is_set():
                     break
                 elif exc.errno in _RECOVERABLE_READ_ERRNOS or exc.errno is None:
@@ -539,37 +590,43 @@ class FrameStream:
                     # means the link itself is failing, so don't spin on it forever.
                     self._assembler.stats.read_errors += 1
                     errors += 1
-                    self._assembler.reset()
+                    with self._assembly:
+                        self._assembler.reset()
                     if errors > _MAX_CONSECUTIVE_READ_ERRORS:
-                        self._error = exc
-                        with self._arrived:
-                            self._arrived.notify_all()
+                        self._fail(exc)
                         return
                 else:
-                    self._error = exc
-                    with self._arrived:
-                        self._arrived.notify_all()
+                    self._fail(exc)
                     return
                 continue
+            except Exception as exc:  # anything else would end the thread silently
+                self._fail(exc)
+                return
             errors = 0
             if not n:
                 continue
-            for frame in self._assembler.feed(view[:n]):
+            if self._tap is not None:
+                self._tap(view[:n])
+            with self._assembly:
+                frames = self._assembler.feed(view[:n])
+            for frame in frames:
                 self._publish(frame)
 
     def _publish(self, frame: RawFrame) -> None:
         """Count any gap in the camera's frame counter, then queue the frame for the
         consumer, dropping the oldest queued frame first if the queue is already full."""
         stats = self._assembler.stats
-        if frame.frame_count is not None:
-            if self._last_frame_count is not None:
-                gap = frame.frame_count - self._last_frame_count - 1
-                if gap > 0:
-                    stats.frames_missed += gap
-            self._last_frame_count = frame.frame_count
-        if not frame.complete and not self._keep_incomplete:
-            return
+        # _publish runs on several threads (libusb event thread, idle watcher, stop()), so the
+        # frame-counter bookkeeping is done under the queue lock too.
         with self._arrived:
+            if frame.frame_count is not None:
+                if self._last_frame_count is not None:
+                    gap = frame.frame_count - self._last_frame_count - 1
+                    if gap > 0:
+                        stats.frames_missed += gap
+                self._last_frame_count = frame.frame_count
+            if not frame.complete and not self._keep_incomplete:
+                return
             while len(self._queue) >= self._depth:
                 self._queue.popleft()
                 stats.frames_dropped_by_consumer += 1
