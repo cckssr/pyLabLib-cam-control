@@ -3,8 +3,7 @@ import os
 import subprocess
 import sys
 
-import distutils.ccompiler  # setuptools installs a compatibility shim for the stdlib removal
-import setuptools  # noqa: F401  (must be imported before distutils on Python 3.12+, see below)
+import setuptools  # noqa: F401  (provides the distutils shim used in make_launcher on 3.12+)
 from pylablib.core.utils import (
     files as file_utils,
 )
@@ -126,7 +125,8 @@ control_copy_file_filter = string_utils.StringFilter(
     exclude=r"pack\.py$",
 )
 control_copy_folder_filter = string_utils.StringFilter(
-    exclude=r"__pycache__|\.git|\.vscode|docs|launcher"
+    exclude=r"__pycache__|\.git|\.github|\.vscode|\.venv|venv|\.pytest_cache|\.ruff_cache"
+    r"|.*\.egg-info|docs|launcher|tests"
 )
 
 
@@ -170,6 +170,10 @@ def make_bat(dst):
 
 
 def make_launcher(dst, recompile=True):
+    # distutils was removed from the stdlib in 3.12; the import works through the shim that
+    # setuptools (imported at the top, so before this) installs
+    import distutils.ccompiler
+
     compiler = distutils.ccompiler.new_compiler()
     for fs in [["run-control-splash", "icon.rc"], ["run-control"], ["run-detect"]]:
         ps = [os.path.join("launcher", f) for f in fs]

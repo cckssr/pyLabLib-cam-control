@@ -8,7 +8,9 @@
 
 int main(int argc, char *argv[]) {
     char call_argv[CLLEN];
-    strcpy_s(call_argv,CLLEN,"python\\python.exe cam-control\\control.py");
+    // run the camcontrol package from the cam-control folder, which holds settings.cfg:
+    // config, defaults and logs are resolved relative to the working directory
+    strcpy_s(call_argv,CLLEN,"python\\python.exe -m camcontrol.app");
     for (int i=1;i<argc;i++) {
         strcat_s(call_argv,CLLEN," ");
         strcat_s(call_argv,CLLEN,argv[i]);
@@ -20,6 +22,6 @@ int main(int argc, char *argv[]) {
     si.cb=sizeof(si);
     memset(&pi,0,sizeof(pi));
     
-    CreateProcess(NULL,call_argv,NULL,NULL,FALSE,0,NULL,NULL,&si,&pi);
+    CreateProcess(NULL,call_argv,NULL,NULL,FALSE,0,NULL,"cam-control",&si,&pi);
     return 0;
 }

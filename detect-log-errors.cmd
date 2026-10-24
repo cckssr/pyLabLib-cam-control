@@ -1,1 +1,1 @@
-..\python\python.exe detect.py --show-errors --nosave
+..\python\python.exe -m camcontrol.detect --show-errors --nosave
