@@ -79,7 +79,6 @@ from camcontrol.gui import (
     color_theme,
     error_message,
     settings_editor,
-    tutorial,
 )
 from camcontrol.resources import resource_path
 from camcontrol.services import dev as dev_services
@@ -140,10 +139,57 @@ _ext_controller_names = {
 
 
 ### Main window ###
+class MainWindow(QtWidgets.QMainWindow):
+    """
+    Top-level window.
+
+    The :class:`StandaloneFrame` (which holds the GUI values tree and the image area) is its
+    central widget; all control and status panels are dock widgets around it.
+    """
+
+    def __init__(self, frame):
+        super().__init__()
+        self.frame = frame
+        self.setDockOptions(
+            QtWidgets.QMainWindow.AnimatedDocks
+            | QtWidgets.QMainWindow.AllowTabbedDocks
+            | QtWidgets.QMainWindow.AllowNestedDocks
+        )
+        self.setTabPosition(QtCore.Qt.AllDockWidgetAreas, QtWidgets.QTabWidget.North)
+
+    def closeEvent(self, event):
+        self.frame.closed.emit()
+        return super().closeEvent(event)
+
+    if _dev_utils_enabled:
+
+        @controller.exsafe
+        def keyPressEvent(self, event):
+            dev_services.on_key_press(self.frame, event)
+            return super().keyPressEvent(event)
+
+
 class StandaloneFrame(container.QWidgetContainer):
+    """
+    Main frame: the root of the GUI values tree and the central image area of :class:`MainWindow`.
+
+    The panels shown in docks are still children of this container (added with
+    ``location="skip"``), so their GUI values paths don't depend on where they are displayed.
+    """
+
+    # (name, title, default area); the order is the order of the View menu entries
+    _docks = [
+        ("camera", "Camera", "right"),
+        ("processing", "Processing", "right"),
+        ("image", "Image", "right"),
+        ("saving", "Saving", "right"),
+        ("status", "Status", "right"),
+        ("time_series", "Time series", "bottom"),
+    ]
+
     @controller.exsafe
     def setup(self, settings, cam_name, cam_desc, plugin_manager):
-        super().setup(layout="hbox")
+        super().setup(layout="vbox", no_margins=True)
         self.ctl.res_mgr = controller.sync_controller(resource_manager_thread)
 
         self.cam_desc = cam_desc
@@ -156,9 +202,10 @@ class StandaloneFrame(container.QWidgetContainer):
         self.compact_interface = settings.get("interface/compact", False)
 
         ### Setup GUI
+        self.window = MainWindow(self)
         cam_display_name = settings["cameras", self.cam_name].get("display_name", self.cam_name)
-        self.setWindowTitle(f"{cam_display_name} control")
-        self.setWindowIcon(QtGui.QIcon(resource_path("icon.ico")))
+        self.window.setWindowTitle(f"{cam_display_name} control")
+        self.window.setWindowIcon(QtGui.QIcon(resource_path("icon.ico")))
         self.cam_ctl = camera_control.GenericCameraCtl(
             cam_thread=cam_thread,
             frame_src_thread=process_thread,
@@ -172,89 +219,77 @@ class StandaloneFrame(container.QWidgetContainer):
         )
         self.add_child("cam_controller", self.cam_ctl, gui_values_path="cam")
         self.cam_ctl.setup()
-        # Setup plots
-        with self.using_new_sublayout("plots", "vbox"):
-            self.plots_tabs = self.add_child("plot_tabs", container.QTabContainer(self))
-            self.plots_tabs.setup()
-            self.trace_plotter = self.add_to_layout(pyqtgraph.PlotWidget(self))
-            self.trace_plotter.setMinimumSize(400, 200)
-            self.set_row_stretch(0, 1)
-            image_tab = self.plots_tabs.add_tab("standard_frame", "Standard", layout="vbox")
-            self.image_proc_indicator = image_tab.add_child(
-                "processing_indicator",
-                ProcessingIndicator_ctl.ProcessingIndicator_GUI(self),
-                gui_values_path="procind",
+        self.panels = {}
+        for name, _, _ in self._docks:
+            panel = self.add_child(
+                f"{name}_panel", container.QFrameContainer(self), location="skip"
             )
-            self.image_proc_indicator.setup(
-                [
-                    (
-                        "binning",
-                        ProcessingIndicator_ctl.binning_item(preprocess_thread),
-                    ),
-                    (
-                        "background",
-                        ProcessingIndicator_ctl.background_item(process_thread),
-                    ),
-                ]
-            )
-            self.cam_ctl.image_updated.connect(self.image_proc_indicator.update_indicators)
-            self.image_plotter = image_tab.add_to_layout(pll_widgets.ImagePlotterCombined(self))
-            self.image_plotter.setup(
-                name="image_plotter", min_size=(400, 400), ctl_caption="Image settings"
-            )
-            self.cam_ctl.add_child("plotter_area", self.image_plotter.plt, gui_values_path=False)
-            self.cam_ctl.add_child("plotter_ctl", self.image_plotter.ctl, gui_values_path="img")
-            self.image_plotter.ctl.set_img_lim(-65536, 65536)
-            # pylablib seeds the min/max preset from the initial (None, None) limits, so "Load
-            # preset" before any "Save preset" would crash; start from the current values instead
-            self.image_plotter.ctl.img_lim_preset = (
-                self.image_plotter.ctl.v["minlim"],
-                self.image_plotter.ctl.v["maxlim"],
-            )
-            with self.image_plotter.using_layout("sidebar"):
-                self.display_settings_table = DisplaySettings_ctl.DisplaySettings_GUI(self)
-                self.image_plotter.add_to_layout(self.display_settings_table, location=-1)
-                self.add_child(
-                    "display_settings_table",
-                    self.display_settings_table,
-                    gui_values_path="disp",
-                    location="skip",
-                )
-                self.display_settings_table.setup(slowdown_thread=slowdown_thread)
-                self.cam_ctl.image_updated.connect(self.display_settings_table.on_new_frame)
-            self.image_plotter.plt.set_colormap("gray_sat")
-        # Setup status and saving
-        if not self.compact_interface:
-            with self.using_new_sublayout("status_saving", "vbox"):
-                self._add_savebox(self)
-                status_box = self.add_group_box("status_box", caption="Status")
-                self._add_camstatus(status_box)
-                self._add_savestatus(status_box)
-                self.add_padding()
-        # Setup control tab widget
-        with self.using_new_sublayout("control_tabs_box", "vbox"):
-            self.control_tabs = self.add_child("control_tabs", container.QTabContainer(self))
-            self.control_tabs.setFixedWidth(300)
-            self.control_tabs.setup()
-            self._add_param_loading(self)
-        cam_tab = self.control_tabs.add_tab("cam_tab", "Camera", no_margins=False)
+            panel.setup(layout="vbox")
+            self.panels[name] = panel
+        # Central area: image (and plugin) display tabs
+        self.plots_tabs = self.add_child("plot_tabs", container.QTabContainer(self))
+        self.plots_tabs.setup()
+        image_tab = self.plots_tabs.add_tab("standard_frame", "Standard", layout="vbox")
+        self.image_proc_indicator = image_tab.add_child(
+            "processing_indicator",
+            ProcessingIndicator_ctl.ProcessingIndicator_GUI(self),
+            gui_values_path="procind",
+        )
+        self.image_proc_indicator.setup(
+            [
+                ("binning", ProcessingIndicator_ctl.binning_item(preprocess_thread)),
+                ("background", ProcessingIndicator_ctl.background_item(process_thread)),
+            ]
+        )
+        self.cam_ctl.image_updated.connect(self.image_proc_indicator.update_indicators)
+        self.image_plotter_area = image_tab.add_to_layout(pll_widgets.ImagePlotter(self))
+        self.image_plotter_area.setup(name="plt", min_size=(320, 240))
+        self.image_plotter_ctl = pll_widgets.ImagePlotterCtl(self)
+        self.image_plotter_ctl.setup(
+            self.image_plotter_area, save_values=("colormap", "img_lim_preset")
+        )
+        self.cam_ctl.add_child("plotter_area", self.image_plotter_area, gui_values_path=False)
+        self.cam_ctl.add_child("plotter_ctl", self.image_plotter_ctl, gui_values_path="img")
+        self.image_plotter_ctl.set_img_lim(-65536, 65536)
+        self.image_plotter_area.set_colormap("gray_sat")
+        # Image panel: plotter controls and display settings
+        image_panel = self.panels["image"]
+        image_panel.add_group_box("image_ctl_box", caption="Image settings").add_to_layout(
+            self.image_plotter_ctl
+        )
+        self.display_settings_table = DisplaySettings_ctl.DisplaySettings_GUI(self)
+        image_panel.add_to_layout(self.display_settings_table)
+        self.add_child(
+            "display_settings_table",
+            self.display_settings_table,
+            gui_values_path="disp",
+            location="skip",
+        )
+        self.display_settings_table.setup(slowdown_thread=slowdown_thread)
+        self._unfix_width(self.display_settings_table)
+        self.cam_ctl.image_updated.connect(self.display_settings_table.on_new_frame)
+        image_panel.add_padding()
+        # Camera panel
         self.cam_settings_table = self.cam_desc.make_gui_control(self)
-        cam_tab.add_group_box(
+        self.panels["camera"].add_group_box(
             "cam_settings_box", caption="Camera settings", no_margins=False
         ).add_to_layout(self.cam_settings_table)
         self.cam_settings_table.setup(self.cam_ctl)
         self.cam_ctl.add_child("settings", self.cam_settings_table, gui_values_path="cam")
-        if self.compact_interface:
-            cam_tab.add_spacer(20)
-            self._add_camstatus(cam_tab)
-            cam_tab.add_padding(stretch=1)
-            save_tab = self.control_tabs.add_tab("save_tab", "Saving", no_margins=False)
-            self._add_savebox(save_tab)
-            save_tab.add_spacer(20)
-            self._add_savestatus(save_tab)
-            save_tab.add_padding(stretch=1)
-        else:
-            cam_tab.add_padding(stretch=1)
+        self.panels["camera"].add_padding()
+        # Saving and status panels
+        self._add_savebox(self.panels["saving"])
+        self._unfix_width(self.saving_settings_table)
+        self.panels["saving"].add_padding()
+        status_box = self.panels["status"].add_group_box("status_box", caption="Status")
+        self._add_camstatus(status_box)
+        self._add_savestatus(status_box)
+        self.panels["status"].add_padding()
+        # Processing panel: processing settings, plus the plugins' control tabs
+        self.control_tabs = self.panels["processing"].add_child(
+            "control_tabs", container.QTabContainer(self)
+        )
+        self.control_tabs.setup()
         proc_tab = self.control_tabs.add_tab("proc_tab", "Processing", no_margins=False)
         self.frame_preprocessing_settings = proc_tab.add_child(
             "frame_preprocessing",
@@ -277,6 +312,10 @@ class StandaloneFrame(container.QWidgetContainer):
             process_thread=process_thread, settings=settings.get("frame_processing")
         )
         proc_tab.add_spacer(10)
+        # Time series plot (its own dock, shown while the plot is enabled)
+        self.trace_plotter = pyqtgraph.PlotWidget(self)
+        self.trace_plotter.setMinimumSize(300, 150)
+        self.panels["time_series"].add_to_layout(self.trace_plotter)
         self.plotting_settings = proc_tab.add_child(
             "plotting_settings",
             PlotControl_ctl.PlotControl_GUI(self),
@@ -296,42 +335,55 @@ class StandaloneFrame(container.QWidgetContainer):
             }
         )
         proc_tab.add_padding()
-        self.set_column_stretch(0, 1)
         self.cam_ctl.set_all_values({"img/normalize": True})
-        self.activity_indicator = self.add_child(
-            "activity_indicator",
-            ActivityIndicator_ctl.ActivityIndicator_GUI(self),
-            gui_values_path="activity_indicator",
-        )
-        self.activity_indicator.setup(resource_manager_thread=resource_manager_thread)
+        # Settings loading scope (chosen in the File menu; kept as a GUI value for compatibility)
+        self._add_param_loading()
         # add virtual GUI values
+        self._size_restored = False
+
+        def restore_size(v):
+            self.window.resize(*v)
+            self._size_restored = True
+
         self.add_property_element(
             "defaults/window/size",
-            lambda: (self.size().width(), self.size().height()),
-            lambda v: self.resize(*v),
+            lambda: (self.window.size().width(), self.window.size().height()),
+            restore_size,
             add_indicator=False,
         )
         self.add_property_element(
             "defaults/window/position",
-            lambda: (self.geometry().x(), self.geometry().y()),
-            lambda v: self.setGeometry(v[0], v[1], self.size().width(), self.size().height()),
+            lambda: (self.window.geometry().x(), self.window.geometry().y()),
+            lambda v: self.window.move(v[0], v[1]),
             add_indicator=False,
         )
         self._maximized = False
 
         def set_maximized(v):
-            if v and self.isVisible():
-                self.showMaximized()
+            if v and self.window.isVisible():
+                self.window.showMaximized()
             self._maximized = v
 
         self.add_property_element(
             "defaults/window/maximized",
-            lambda: bool(self.windowState() & QtCore.Qt.WindowMaximized),
+            lambda: bool(self.window.windowState() & QtCore.Qt.WindowMaximized),
             set_maximized,
             add_indicator=False,
         )
+        self._dock_state_restored = False
+
+        def restore_dock_state(v):
+            self._dock_state_restored = self.window.restoreState(
+                QtCore.QByteArray.fromHex(v.encode())
+            )
+
+        self.add_property_element(
+            "defaults/window/dock_state",
+            lambda: bytes(self.window.saveState().toHex()).decode(),
+            restore_dock_state,
+            add_indicator=False,
+        )
         self.add_virtual_element("defaults/settings_folder", value="", add_indicator=False)
-        self.tutorial_box = None
         self.settings_editor = None
         self.about_window = None
 
@@ -341,6 +393,18 @@ class StandaloneFrame(container.QWidgetContainer):
         )
         plugin_tab.add_padding(stretch=1, location=50)
         self._plugin_parameters = dictionary.Dictionary()
+
+        # Window: docks, actions, menus, toolbar, status bar
+        self.window.setCentralWidget(self)
+        self.docks = {}
+        for name, title, _ in self._docks:
+            self.docks[name] = self._make_dock(name, title, self.panels[name])
+        self.arrange_default_layout()
+        self._setup_actions()
+        self._setup_menus()
+        self._setup_toolbar()
+        self._setup_status_bar()
+        self.plotting_settings.params.vs["enable"].connect(self._show_time_series)
 
         # Setup parameters loading and saving
         if "interface/level" in settings:
@@ -368,6 +432,374 @@ class StandaloneFrame(container.QWidgetContainer):
         self.plugin_manager.set_main_frame(self)
         self.plugin_manager.unlock_barrier("plugin_setup")
 
+    @staticmethod
+    def _unfix_width(widget):
+        """Let a panel that sets a fixed width for the old column layout fill its dock instead"""
+        widget.setMinimumWidth(0)
+        widget.setMaximumWidth(QtWidgets.QWIDGETSIZE_MAX)
+
+    def _make_dock(self, name, title, widget):
+        dock = QtWidgets.QDockWidget(title, self.window)
+        dock.setObjectName(f"dock_{name}")  # identifies the dock in saveState/restoreState
+        scroll = QtWidgets.QScrollArea(dock)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+        scroll.setWidget(widget)
+        # don't let the dock shrink until every field is clipped, but don't let a panel with
+        # a wide layout claim half the window either (it scrolls horizontally instead)
+        scroll.setMinimumWidth(
+            min(
+                widget.minimumSizeHint().width() + scroll.verticalScrollBar().sizeHint().width(),
+                self._dock_min_width,
+            )
+        )
+        dock.setWidget(scroll)
+        return dock
+
+    _dock_areas = {"right": QtCore.Qt.RightDockWidgetArea, "bottom": QtCore.Qt.BottomDockWidgetArea}
+    _dock_min_width = 340
+    _dock_max_default_width = 520
+    _dock_default_height = 220
+
+    @controller.exsafe
+    def arrange_default_layout(self):
+        """Put all docks back in their default places"""
+        d = self.docks
+        for dock in d.values():
+            self.window.removeDockWidget(dock)
+            dock.setFloating(False)
+        # the right column reaches down to the status bar; the time series plot sits below
+        # the image only
+        self.window.setCorner(QtCore.Qt.BottomRightCorner, QtCore.Qt.RightDockWidgetArea)
+        right = self._dock_areas["right"]
+        # right column: camera / processing / image tabs on top, saving / status tabs below;
+        # with the compact interface, all of them share one tab group
+        self.window.addDockWidget(right, d["camera"], QtCore.Qt.Vertical)
+        if not self.compact_interface:
+            self.window.addDockWidget(right, d["saving"], QtCore.Qt.Vertical)
+        for name in ["processing", "image"]:
+            self.window.tabifyDockWidget(d["camera"], d[name])
+        if self.compact_interface:
+            self.window.tabifyDockWidget(d["camera"], d["saving"])
+            self.window.tabifyDockWidget(d["camera"], d["status"])
+        else:
+            self.window.tabifyDockWidget(d["saving"], d["status"])
+            d["saving"].raise_()
+        self.window.addDockWidget(self._dock_areas["bottom"], d["time_series"])
+        for dock in d.values():
+            dock.show()
+        d["camera"].raise_()
+        self._show_time_series(self.plotting_settings.v["enable"])
+        self._resize_default_docks()
+
+    def _resize_default_docks(self):
+        """Give the default dock layout its default sizes (only effective once shown)"""
+        d = self.docks
+        # wide enough for the right column's panels to show without scrolling, within limits
+        needed = max(
+            self.panels[n].minimumSizeHint().width() for n in ["camera", "processing", "saving"]
+        )
+        width = max(self._dock_min_width, min(needed + 24, self._dock_max_default_width))
+        self.window.resizeDocks([d["camera"]], [width], QtCore.Qt.Horizontal)
+        self.window.resizeDocks([d["time_series"]], [self._dock_default_height], QtCore.Qt.Vertical)
+
+    def _show_time_series(self, enabled):
+        dock = self.docks["time_series"]
+        appearing = enabled and not dock.isVisible()
+        dock.setVisible(bool(enabled))
+        if appearing and not dock.isFloating():
+            QtCore.QTimer.singleShot(
+                0,
+                lambda: self.window.resizeDocks(
+                    [dock], [self._dock_default_height], QtCore.Qt.Vertical
+                ),
+            )
+
+    def _add_action(self, name, text, slot, shortcut=None, icon=None, checkable=False, tip=None):
+        action = QtWidgets.QAction(text, self.window)
+        if icon is not None:
+            action.setIcon(
+                QtGui.QIcon(resource_path(icon))
+                if icon.endswith(".png")
+                else self.window.style().standardIcon(getattr(QtWidgets.QStyle, icon))
+            )
+        if shortcut is not None:
+            action.setShortcut(QtGui.QKeySequence(shortcut))
+            action.setShortcutContext(QtCore.Qt.WindowShortcut)
+        action.setCheckable(checkable)
+        if tip is not None:
+            action.setToolTip(tip + (f" ({action.shortcut().toString()})" if shortcut else ""))
+            action.setStatusTip(tip)
+        action.triggered.connect(controller.exsafe(slot))
+        self.window.addAction(action)  # shortcuts work even while the action's menu is hidden
+        self.actions[name] = action
+        return action
+
+    def _setup_actions(self):
+        self.actions = {}
+        ks = QtGui.QKeySequence
+        add = self._add_action
+        add(
+            "connect",
+            "&Connect",
+            self.cam_ctl.dev_connect,
+            icon="SP_DialogYesButton",
+            tip="Connect to the camera",
+        )
+        add(
+            "disconnect",
+            "&Disconnect",
+            self.cam_ctl.dev_disconnect,
+            icon="SP_DialogNoButton",
+            tip="Disconnect from the camera",
+        )
+        add(
+            "start",
+            "&Start acquisition",
+            self.cam_ctl.acq_start,
+            icon="play.png",
+            tip="Start acquisition",
+        )
+        add(
+            "stop",
+            "S&top acquisition",
+            self.cam_ctl.acq_stop,
+            icon="stop.png",
+            tip="Stop acquisition",
+        )
+        add(
+            "toggle_acquisition",
+            "Start/stop acquisition",
+            self.toggle_acquisition,
+            shortcut="Ctrl+Space",
+        )
+        add(
+            "record",
+            "&Record",
+            self.set_recording,
+            shortcut="Ctrl+R",
+            icon="rec.png",
+            checkable=True,
+            tip="Start/stop saving frames",
+        )
+        add(
+            "snap",
+            "S&nap",
+            self.snap,
+            shortcut="Ctrl+T",
+            icon="SP_DialogSaveButton",
+            tip="Save the displayed frame",
+        )
+        add(
+            "auto_levels",
+            "&Auto levels",
+            self.set_auto_levels,
+            shortcut="Ctrl+L",
+            checkable=True,
+            tip="Scale the display to each frame's min/max",
+        )
+        add(
+            "full_screen",
+            "&Full screen",
+            self.set_full_screen,
+            shortcut=ks.FullScreen,
+            checkable=True,
+        )
+        add("reset_layout", "&Reset layout", self.arrange_default_layout)
+        add("load_settings", "&Load settings...", self.on_load_settings_button, shortcut=ks.Open)
+        add("save_settings", "&Save settings...", self.on_save_settings_button, shortcut=ks.Save)
+        add("open_save_folder", "Open saving &folder", self.open_save_folder)
+        add(
+            "preferences",
+            "&Preferences...",
+            lambda: self.call_extra("settings_editor"),
+            shortcut=ks.Preferences,
+        )
+        self.actions["preferences"].setMenuRole(QtWidgets.QAction.PreferencesRole)
+        add("cam_shortcut", "Create camera &shortcut...", lambda: self.call_extra("cam_shortcut"))
+        add("quit", "&Quit", self.window.close, shortcut=ks.Quit)
+        self.actions["quit"].setMenuRole(QtWidgets.QAction.QuitRole)
+        add("shortcuts", "&Keyboard shortcuts", self.show_shortcuts)
+        add("open_log_folder", "Open &log folder", self.open_log_folder)
+        add("about", "&About", lambda: self.call_extra("about"))
+        self.actions["about"].setMenuRole(QtWidgets.QAction.AboutRole)
+
+    def _setup_menus(self):
+        menubar = self.window.menuBar()
+        a = self.actions
+        file_menu = menubar.addMenu("&File")
+        file_menu.addAction(a["load_settings"])
+        scope_menu = file_menu.addMenu("Settings loading scope")
+        scope_group = QtWidgets.QActionGroup(self.window)
+        for value, label in [("all", "All"), ("camera", "Camera only"), ("gui", "GUI only")]:
+            act = scope_menu.addAction(label)
+            act.setCheckable(True)
+            act.setData(value)
+            scope_group.addAction(act)
+        scope_group.triggered.connect(lambda act: self.set_value("settings_load_scope", act.data()))
+
+        def sync_scope():
+            for act in scope_group.actions():
+                act.setChecked(act.data() == self.v["settings_load_scope"])
+
+        scope_menu.aboutToShow.connect(sync_scope)
+        file_menu.addAction(a["save_settings"])
+        file_menu.addSeparator()
+        file_menu.addAction(a["open_save_folder"])
+        if win32com_present:
+            file_menu.addAction(a["cam_shortcut"])
+        file_menu.addAction(a["preferences"])
+        file_menu.addSeparator()
+        file_menu.addAction(a["quit"])
+        camera_menu = menubar.addMenu("&Camera")
+        for name in [
+            "connect",
+            "disconnect",
+            None,
+            "start",
+            "stop",
+            "toggle_acquisition",
+            None,
+            "snap",
+            "record",
+        ]:
+            camera_menu.addSeparator() if name is None else camera_menu.addAction(a[name])
+        view_menu = menubar.addMenu("&View")
+        for name, _, _ in self._docks:
+            view_menu.addAction(self.docks[name].toggleViewAction())
+        view_menu.addSeparator()
+        view_menu.addAction(a["auto_levels"])
+        view_menu.addAction(a["full_screen"])
+        view_menu.addAction(a["reset_layout"])
+        self._view_menu = view_menu
+        help_menu = menubar.addMenu("&Help")
+        for name in ["shortcuts", "open_log_folder", "about"]:
+            help_menu.addAction(a[name])
+
+    def _setup_toolbar(self):
+        toolbar = self.window.addToolBar("Main toolbar")
+        toolbar.setObjectName("toolbar_main")
+        toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
+        toolbar.setIconSize(QtCore.QSize(16, 16))
+        for name in [
+            "connect",
+            "disconnect",
+            None,
+            "start",
+            "stop",
+            None,
+            "snap",
+            "record",
+            None,
+            "auto_levels",
+        ]:
+            toolbar.addSeparator() if name is None else toolbar.addAction(self.actions[name])
+        self._view_menu.insertAction(self.actions["auto_levels"], toolbar.toggleViewAction())
+
+    def _setup_status_bar(self):
+        status_bar = self.window.statusBar()
+        self._status_labels = {}
+        for name in ["camera", "fps", "saving"]:
+            label = QtWidgets.QLabel(status_bar)
+            label.setContentsMargins(6, 0, 6, 0)
+            status_bar.addWidget(label)
+            self._status_labels[name] = label
+        self.activity_indicator = ActivityIndicator_ctl.ActivityIndicator_GUI(status_bar)
+        self.add_child(
+            "activity_indicator",
+            self.activity_indicator,
+            gui_values_path="activity_indicator",
+            location="skip",
+        )
+        self.activity_indicator.setup(
+            resource_manager_thread=resource_manager_thread, orientation="horizontal"
+        )
+        status_bar.addPermanentWidget(self.activity_indicator)
+        self.add_timer_event("update_status_bar", self.update_status_bar, period=0.5)
+
+    _connection_text = {"opened": "Connected", "closed": "Disconnected"}
+
+    def update_status_bar(self):
+        """Refresh the status bar and the enabled/checked state of the actions"""
+        dev = self.cam_ctl.dev
+        if dev is None:
+            return
+        connection = dev.v["status/connection"]
+        acquisition = dev.v["status/acquisition"]
+        connected = connection == "opened"
+        acquiring = connected and acquisition not in {None, "stopped"}
+        text = self._connection_text.get(connection, str(connection).capitalize())
+        if connected:
+            text += " · " + ("Acquiring" if acquiring else "Idle")
+        self._status_labels["camera"].setText(text)
+        self._status_labels["camera"].setStyleSheet(
+            "" if connected else "background: gold; color: black; font-weight: bold"
+        )
+        # values are None until the first acquisition / display update
+        fps = (dev.v["frames/fps"] or 0) if acquiring else 0
+        display_fps = self.display_settings_table.v["display_fps"] or 0
+        self._status_labels["fps"].setText(f"Camera {fps:.1f} fps · display {display_fps:.1f} fps")
+        saving = self.cam_ctl.saving_in_progress()
+        saved = (self.cam_ctl.saver.v["saved"] or 0) if self.cam_ctl.saver else 0
+        self._status_labels["saving"].setText(
+            f"Saving: {saved} frames" if saving else f"Last saved: {saved} frames"
+        )
+        a = self.actions
+        a["connect"].setEnabled(not connected)
+        a["disconnect"].setEnabled(connected)
+        a["start"].setEnabled(connected and not acquiring)
+        a["stop"].setEnabled(acquiring)
+        a["record"].setChecked(bool(self.saving_settings_table.v["saving"]))
+        a["auto_levels"].setChecked(bool(self.image_plotter_ctl.v["normalize"]))
+        a["full_screen"].setChecked(self.window.isFullScreen())
+
+    def toggle_acquisition(self):
+        dev = self.cam_ctl.dev
+        if dev is not None and dev.v["status/acquisition"] not in {None, "stopped"}:
+            self.cam_ctl.acq_stop()
+        else:
+            self.cam_ctl.acq_start()
+
+    def set_recording(self, enabled):
+        self.saving_settings_table.v["saving"] = bool(enabled)
+
+    def snap(self):
+        self.cam_ctl.toggle_saving(
+            mode="snap", source=self.saving_settings_table.v["snap_display_source"]
+        )
+
+    def set_auto_levels(self, enabled):
+        self.image_plotter_ctl.v["normalize"] = bool(enabled)
+
+    def set_full_screen(self, enabled):
+        if enabled:
+            self.window.showFullScreen()
+        else:
+            self.window.showNormal()
+
+    def open_save_folder(self):
+        path = self.saving_settings_table.v["path"] or ""
+        folder = path if os.path.isdir(path) else os.path.dirname(path)
+        while folder and not os.path.isdir(folder):
+            folder = os.path.dirname(folder)
+        if folder:
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(folder))
+
+    def open_log_folder(self):
+        QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(os.getcwd()))
+
+    def show_shortcuts(self):
+        rows = "".join(
+            f"<tr><td>{a.text().replace('&', '')}</td><td>&nbsp;&nbsp;<b>"
+            f"{a.shortcut().toString(QtGui.QKeySequence.NativeText)}</b></td></tr>"
+            for a in self.actions.values()
+            if not a.shortcut().isEmpty()
+        )
+        QtWidgets.QMessageBox.information(
+            self.window, "Keyboard shortcuts", f"<table>{rows}</table>"
+        )
+
     def _add_savebox(self, parent):
         self.saving_settings_table = parent.add_to_layout(SaveBox_ctl.SaveBox_GUI(self))
         self.saving_settings_table.setup(self.cam_ctl)
@@ -383,53 +815,36 @@ class StandaloneFrame(container.QWidgetContainer):
         self.save_status_table.setup(self.cam_ctl)
         self.cam_ctl.add_child("savestat", self.save_status_table, gui_values_path="savestat")
 
-    def _add_param_loading(self, parent):
-        self.params_loading_settings = parent.add_to_layout(param_table.ParamTable(self))
+    def _add_param_loading(self):
+        # Never shown: the File menu edits this value; kept as a widget so the stored GUI
+        # values (and the settings files written by earlier versions) stay compatible
+        self.params_loading_settings = param_table.ParamTable(self)
         self.add_child("params_loading_settings", self.params_loading_settings, location="skip")
         self.params_loading_settings.setup(add_indicator=False)
-        with self.params_loading_settings.using_new_sublayout("buttons", "hbox"):
-            self.params_loading_settings.add_button("load_settings", "Load settings...")
-            self.params_loading_settings.add_button("save_settings", "Save settings...")
-        with self.params_loading_settings.using_new_sublayout("scope", "hbox"):
-            self.params_loading_settings.add_combo_box(
-                "settings_load_scope",
-                label="Loading scope:",
-                options=["All", "Camera", "GUI"],
-                index_values=["all", "camera", "gui"],
-            )
-            self.params_loading_settings.add_spacer(1, 30)
-            self.params_loading_settings.add_dropdown_button(
-                "extras",
-                "Extra...",
-                options=["Tutorial", "Create camera shortcut", "Preferences", "About"],
-                index_values=["tutorial", "cam_shortcut", "settings_editor", "about"],
-            )
-            self.params_loading_settings.w["extras"].setIcon(
-                QtGui.QIcon(QtGui.QPixmap(resource_path("cog.png")))
-            )
-        self.params_loading_settings.vs["load_settings"].connect(self.on_load_settings_button)
-        self.params_loading_settings.vs["save_settings"].connect(self.on_save_settings_button)
-        self.params_loading_settings.vs["extras"].connect(self.call_extra)
+        self.params_loading_settings.add_combo_box(
+            "settings_load_scope",
+            label="Loading scope:",
+            options=["All", "Camera", "GUI"],
+            index_values=["all", "camera", "gui"],
+        )
+        self.params_loading_settings.hide()
 
     closed = Signal()
 
-    def closeEvent(self, event):
-        self.closed.emit()
-        return super().closeEvent(event)
-
-    if _dev_utils_enabled:
-
-        @controller.exsafe
-        def keyPressEvent(self, event):
-            dev_services.on_key_press(self, event)
-            return super().keyPressEvent(event)
-
     def show(self):
+        if not self._size_restored:  # first run: a reasonable share of the screen
+            screen = QtWidgets.QApplication.primaryScreen().availableGeometry()
+            self.window.resize(
+                min(int(screen.width() * 0.85), 1600), min(int(screen.height() * 0.85), 1000)
+            )
         if self._maximized:
             self._maximized = False
-            self.showMaximized()
+            self.window.showMaximized()
         else:
-            super().show()
+            self.window.show()
+        if not self._dock_state_restored:
+            # after the first layout pass; resizing an unlaid-out window has no effect
+            QtCore.QTimer.singleShot(0, self._resize_default_docks)
 
     @controller.exsafeSlot()
     def on_load_settings_button(self):
@@ -454,12 +869,6 @@ class StandaloneFrame(container.QWidgetContainer):
         if path:
             self.v["defaults/settings_folder"] = os.path.split(path)[0]
             self.save_settings(path)
-
-    def show_tutorial_box(self):
-        self.tutorial_box = tutorial.TutorialBox(self)
-        self.tutorial_box.setup(self)
-        self.tutorial_box.show()
-        self.locals["tutorial_shown"] = True
 
     def show_settings_editor(self):
         self.settings_editor = settings_editor.SettingsEditor(self)
@@ -499,14 +908,6 @@ class StandaloneFrame(container.QWidgetContainer):
 
     @controller.exsafeSlot(object)
     def call_extra(self, value):
-        if value == "tutorial":
-            if self.tutorial_box is None:
-                self.show_tutorial_box()
-            elif not self.tutorial_box.isVisible():
-                self.tutorial_box.close()
-                self.show_tutorial_box()
-            else:
-                self.tutorial_box.showNormal()
         if value == "cam_shortcut":
             self.create_camera_shortcut()
         if value == "settings_editor":
@@ -699,8 +1100,6 @@ class StandaloneFrame(container.QWidgetContainer):
         self.cam_ctl.dev.cs.apply_parameters({})  # sync with the camera
         super().start()
         self.plugin_manager.unlock_barrier("plugin_start")
-        if not self.locals.get("tutorial_shown", False):
-            self.show_tutorial_box()
 
     @controller.toploopSlot()
     def stop(self):
@@ -1062,7 +1461,6 @@ def start_app(ask_on_no_cam=True):
 def prepare_app():
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
-    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_Use96Dpi, True)
     return QtWidgets.QApplication([])
 
 

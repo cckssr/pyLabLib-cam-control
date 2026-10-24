@@ -244,10 +244,22 @@ Both `_load_modules`/`_discover_subclasses` helpers live in
 
 ### GUI (`camcontrol/gui/`)
 
-Built entirely on `pylablib.core.gui.widgets`. Main window is
-`StandaloneFrame` in `camcontrol/app.py`. Base classes every camera-specific
-GUI subclasses: `base_cam_ctl_gui.ICameraSettings_GUI` /
-`GenericCameraSettings_GUI` / `GenericCameraStatus_GUI`.
+Built entirely on `pylablib.core.gui.widgets`. The top-level window is `MainWindow`
+(a `QMainWindow`) in `camcontrol/app.py`; its central widget is `StandaloneFrame`, which is
+both the image area (`plots_tabs`) and the root of the GUI values tree. All other panels
+(`camera`, `processing`, `image`, `saving`, `status`, `time_series`) are frame containers
+added to `StandaloneFrame` with `location="skip"` (so their GUI values paths -- `cam/...`,
+`proc`, `preproc/*`, `plotting`, `disp`, ... -- and therefore `defaults.cfg` files from
+older versions are unchanged) and displayed in `QDockWidget`s. Plugins keep using
+`plots_tabs` and `control_tabs` (now inside the Processing dock). Menu bar, toolbar
+(Connect/Disconnect, Start/Stop, Snap, Record, Auto levels), keyboard shortcuts (Help →
+Keyboard shortcuts) and a status bar (connection/acquisition state, camera/display FPS,
+saving progress, horizontal activity indicators) are built in `StandaloneFrame._setup_*`.
+The dock layout is persisted as `defaults/window/dock_state` (hex `saveState`); View →
+Reset layout restores the default (`interface/compact` tabs all right-hand docks into one
+group). The old position-based tutorial was removed. Base classes every camera-specific
+GUI subclasses: `base_cam_ctl_gui.ICameraSettings_GUI` / `GenericCameraSettings_GUI` /
+`GenericCameraStatus_GUI`.
 
 ### Resources (`camcontrol/resources/`)
 
@@ -304,10 +316,15 @@ pytest
   process via `tests/app_probe.py` (prints a JSON result line), sidestepping the
   one-app-per-process limitation described below
 - `test_acquisition.py` — full app through the `simulated` camera with the
-  `filter`/`trigger_save` plugins enabled, offscreen; a single combined test
-  rather than several, since pylablib's thread-controller registry is global
-  process state and running two full app instances in one pytest session
-  risks stale entries from incomplete teardown between tests. Note
-  `controller.get_gui_controller().stop()` raises
-  `threadprop.InterruptExceptionStop` by design (its mechanism for unwinding
-  the GUI event loop) — this must be caught, not treated as a test failure.
+  `filter`/`trigger_save` plugins enabled; `test_main_window.py` — dock window
+  structure and layout persistence across two runs.
+
+**Never run the app or create pylablib plot widgets inside the pytest process.**
+pylablib's thread-controller registry and the `QApplication` are per-process state, and
+pylablib/pyqtgraph widgets created in-process segfault at interpreter shutdown (exit code
+139, a "Python quit unexpectedly" dialog on macOS). Full-app tests go through the
+`run_app_probe` fixture (`tests/conftest.py`), which runs `tests/app_probe.py` in a fresh
+process and returns its JSON result line. `controller.get_gui_controller().stop()` raises
+`threadprop.InterruptExceptionStop` by design (it unwinds the GUI event loop); the probe
+catches it. Tests run with `QT_QPA_PLATFORM=offscreen` and `CAMCONTROL_USE_OPENGL=0`
+(offscreen Qt has no GL context); the offscreen screen is only 800x600.

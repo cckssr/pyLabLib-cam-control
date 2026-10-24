@@ -10,7 +10,6 @@ from camcontrol.resources import resource_path
 def prepare_app():
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
-    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_Use96Dpi, True)
     return QtWidgets.QApplication([])
 
 

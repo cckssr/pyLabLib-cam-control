@@ -20,10 +20,21 @@ class ActivityIndicator_GUI(container.QWidgetContainer):
         "error": "background:red; color: black",
     }
 
-    def setup(self, resource_manager_thread):
+    def setup(self, resource_manager_thread, orientation="vertical"):
+        """
+        Set up the indicator.
+
+        `orientation` is ``"vertical"`` (a narrow column) or ``"horizontal"`` (a single row,
+        e.g. for a status bar).
+        """
         super().setup(no_margins=True)
-        self.setMinimumWidth(25)
-        self.setMaximumWidth(25)
+        self._axis = 1 if orientation == "horizontal" else 0  # layout axis indicators run along
+        if self._axis:
+            self.setMinimumHeight(22)
+            self.setMaximumHeight(22)
+        else:
+            self.setMinimumWidth(25)
+            self.setMaximumWidth(25)
         self.resource_manager_thread = resource_manager_thread
         self.resource_manager = controller.sync_controller(self.resource_manager_thread)
         self.pinds = {g: {} for g in self._ind_groups}
@@ -31,10 +42,17 @@ class ActivityIndicator_GUI(container.QWidgetContainer):
         self.params = self.add_child("params", param_table.ParamTable(self))
         self.params.setup(add_indicator=False)
         self.params.get_sublayout().setContentsMargins(0, 0, 0, 0)
-        for g in self._ind_groups:
-            self.params.add_sublayout(g, kind="vbox")
-            self.params.add_spacer(10)
-        self.params.add_padding(stretch=1)
+        for i, g in enumerate(self._ind_groups):
+            if self._axis:
+                self.params.add_sublayout(g, kind="hbox", location=(0, 2 * i))
+                self.params.add_spacer(width=10, location=(0, 2 * i + 1))
+            else:
+                self.params.add_sublayout(g, kind="vbox")
+                self.params.add_spacer(10)
+        if self._axis:
+            self.params.add_padding("horizontal", location=(0, 2 * len(self._ind_groups)))
+        else:
+            self.params.add_padding(stretch=1)
         # Timer
         self.add_timer_event("update_pinds", self.update_pinds, period=0.5)
         self.ctl.add_thread_method("update_activity_status", self.update_activity_status)
@@ -62,8 +80,8 @@ class ActivityIndicator_GUI(container.QWidgetContainer):
                 nxt = n
                 break
         if nxt is None:
-            return self.params.get_layout_shape(group)[0], order
-        return self.params.get_element_position(self.params.w[group, nxt])[1][0], order
+            return self.params.get_layout_shape(group)[self._axis], order
+        return self.params.get_element_position(self.params.w[group, nxt])[1][self._axis], order
 
     def add_pind(self, group, name, caption=None, short_cap=None, order=None):
         """Add indicator to the table"""

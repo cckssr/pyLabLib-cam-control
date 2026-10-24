@@ -14,7 +14,7 @@ import sys
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("CAMCONTROL_USE_OPENGL", "0")  # no GL context offscreen
 
-from pylablib.core.gui import QtCore
+from pylablib.core.gui import QtCore, QtWidgets
 from pylablib.core.thread import controller, threadprop
 
 from camcontrol import app as camapp
@@ -50,6 +50,12 @@ def main():
     def start():
         cam = controller.sync_controller("camera")
         results["connection"] = cam.v["status/connection"]
+        window = next(
+            w for w in QtWidgets.QApplication.topLevelWidgets() if type(w).__name__ == "MainWindow"
+        )
+        results["docks"] = {n: d.isVisible() for n, d in window.frame.docks.items()}
+        results["menus"] = [a.text().replace("&", "") for a in window.menuBar().actions()]
+        results["dock_state_restored"] = window.frame._dock_state_restored
         cam.ca.acq_start()
         QtCore.QTimer.singleShot(int(seconds * 1000), measure)
 
