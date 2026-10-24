@@ -229,17 +229,13 @@ class ChunkAssembler:
         """Whether an index-0 chunk is chunk 256*k of the frame in progress, not a new frame.
 
         The marker's index is a single byte, so a frame longer than 256 chunks (~4 MiB, e.g.
-        a CS505/CS895 at full sensor) numbers its 257th chunk 0 again. Only a frame still
-        short of ``expected_chunks`` whose next index is due to wrap can be continuing; it
-        is then told apart from a real frame start by the header: a CS continuation chunk
-        has no ``TSI`` metadata header, and a Zelux one repeats its own frame's counter.
+        a CS505/CS895 at full sensor) numbers its 257th chunk 0 again. Only a frame whose
+        next index is due to wrap can be continuing; it is then told apart from a real frame
+        start by the header: a CS continuation chunk has no ``TSI`` metadata header, and a
+        Zelux one repeats its own frame's counter. ``expected_chunks`` is deliberately not
+        consulted -- it may still be an underestimate that has only grown chunk by chunk.
         """
-        if (
-            not self._chunks
-            or self._next_index is None
-            or self._next_index % 256 != 0
-            or len(self._chunks) >= self.expected_chunks
-        ):
+        if not self._chunks or self._next_index is None or self._next_index % 256 != 0:
             return False
         first = parse_frame_header(self._chunks[0][:256])
         this = parse_frame_header(chunk[:256])

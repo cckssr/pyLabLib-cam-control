@@ -182,6 +182,26 @@ there will keep getting re-applied on connect even after upgrading, until
 that cached value is cleared (delete the `<name>/cam/cam/roi` line, or use
 the GUI's "Set full ROI") or `defaults.cfg` is removed outright.
 
+#### Emulated Thorlabs TSI camera (`ThorlabsTSIMock`)
+
+`camcontrol/thorlabs_tsi/fake.py`'s `FakeTsiDevice` emulates a camera at the pyusb `Device`
+level: it answers the ASCII command channel statefully (snapping values, in-band errors
+such as "Camera Running") and streams frames in the exact wire format of either family
+(`family="zelux"` or `"cs"`, optionally `color=True` or a custom `sensor`), so the real
+transport, chunk assembler, decoder, `TsiCamera` and `ThorlabsTSICamera` run unmodified on
+top of it. `FakeFaults` injects dropped chunks, truncated frames, junk/trailers, counter
+gaps, endpoint stalls, command errors, late replies and unplugging. It cannot drive
+`AsyncBulkReader` (no libusb handle), so it needs `TsiCamera(..., synchronous_stream=True)`;
+`FakeTsiBus([...]).find` replaces `usb.core.find`. `cameras/ThorlabsTSIMock.py` registers
+it as camera kind `ThorlabsTSIMock` (never autodetected; params `family`, `color`, `model`,
+`serial`, `sensor`, `faults/<FakeFaults field>`), reusing the TSIDirect thread and GUI:
+
+```
+cameras/tsi_mock/kind	ThorlabsTSIMock
+cameras/tsi_mock/params/family	cs
+cameras/tsi_mock/params/color	True
+```
+
 ### Plugins and filters (two independent extension systems)
 
 Both use the same discovery pattern: scan the package's own bundled
@@ -266,6 +286,13 @@ pytest
   hook works, no double-loading when the external dir is the bundled one
 - `test_numba_kernels.py` — the two 12-bit packing kernels agree
 - `test_saving.py` — TIFF/BigTIFF round-trip via imageio
+- `test_tsi_frames.py`, `test_tsi_assembler.py`, `test_tsi_commands.py`,
+  `test_tsi_adapter.py` — the Thorlabs TSI driver and adapter against `FakeTsiDevice`
+  (wire format round trips, every fault type, >256-chunk frames, command channel,
+  acquisition/stop/restart/unplug through pylablib's camera API)
+- `test_acquisition_tsi_mock.py` — full app on `ThorlabsTSIMock`, each case in a fresh
+  process via `tests/app_probe.py` (prints a JSON result line), sidestepping the
+  one-app-per-process limitation described below
 - `test_acquisition.py` — full app through the `simulated` camera with the
   `filter`/`trigger_save` plugins enabled, offscreen; a single combined test
   rather than several, since pylablib's thread-controller registry is global
