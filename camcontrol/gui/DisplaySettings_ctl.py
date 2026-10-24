@@ -27,7 +27,7 @@ class DisplaySettings_GUI(container.QGroupBoxContainer):
         # Setup GUI
         self.params = self.add_child("params", param_table.ParamTable(self))
         self.params.setup(add_indicator=False)
-        self.params.add_decoration_label("Display update period:", location=("next", 0, 1, 2))
+        self.params.add_decoration_label("Display update period (s):", location=("next", 0, 1, 2))
         self.params.add_num_edit(
             "display_update_period",
             formatter=".3f",

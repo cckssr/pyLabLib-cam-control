@@ -138,9 +138,15 @@ class FramePreproccessSlowdown_GUI(container.QGroupBoxContainer):
             formatter="int",
             limiter=(1, None, "coerce", "int"),
             value=100,
-            label="Slowdown buffer:",
+            label="Slowdown buffer (frames):",
         )
         self.params.add_toggle_button("slowdown_enabled", caption="Slowdown", add_indicator=False)
+        self.params.w["slowdown_fps"].setToolTip(
+            "Frame rate of the slowed-down stream passed on to processing and display"
+        )
+        self.params.w["slowdown_buffer"].setToolTip(
+            "Number of frames buffered to be replayed at the target frame rate"
+        )
 
         @controller.exsafe
         def setup_slowdown():

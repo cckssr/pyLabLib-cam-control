@@ -381,6 +381,9 @@ class GenericCameraCtl(container.QContainer):
         just_disconnected = not connected and self.connected
         self.connected = connected
         if just_connected:
+            # the settings panel is only set up (enabled, limits) for a connected camera;
+            # one that wasn't connected at startup gets set up here
+            self.setup_gui_parameters()
             if "settings" in self.c:
                 self.c["settings"].on_connection_changed(True)
             self.send_parameters()

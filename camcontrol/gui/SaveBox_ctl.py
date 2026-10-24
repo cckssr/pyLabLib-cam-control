@@ -141,6 +141,17 @@ _error_description = {
 }
 
 
+def _show_warning(parent, title, text):
+    """Show a warning without blocking: these come from the periodic status update, which a
+    modal box would stall (along with the rest of the GUI) until it is dismissed"""
+    box = QtWidgets.QMessageBox(
+        QtWidgets.QMessageBox.Warning, title, text, QtWidgets.QMessageBox.Ok, parent
+    )
+    box.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+    box.setWindowModality(QtCore.Qt.NonModal)
+    box.show()
+
+
 def _get_error_message(err, long=False):
     if err[0] in _error_description:
         return _error_description[err[0]][1 if long else 0]
@@ -255,6 +266,16 @@ class SaveBox_GUI(container.QGroupBoxContainer):
             limiter=(1, None, "coerce", "int"),
         )
         self.params.add_toggle_button("pretrigger_enabled", "Enabled", location=(-1, 2, 1, 1))
+        for name, tip in [
+            ("batch_size", "With 'Limit': stop saving after this many frames"),
+            ("filesplit", "With 'Split': start a new file every this many frames"),
+            (
+                "pretrigger_size",
+                "With 'Enabled': keep the last this many frames in memory, and save them too "
+                "when saving starts",
+            ),
+        ]:
+            self.params.w[name].setToolTip(tip)
 
         @controller.exsafe
         def update_pretrigger():
@@ -497,21 +518,15 @@ class SaveBox_GUI(container.QGroupBoxContainer):
                 None,
             ):
                 error_text = _get_error_message(params["status/error"], long=True)
-                QtWidgets.QMessageBox.warning(
-                    self,
-                    "Saving issue",
-                    f"Saving experienced an issue: {error_text}",
-                    QtWidgets.QMessageBox.Ok,
-                )
+                _show_warning(self, "Saving issue", f"Saving experienced an issue: {error_text}")
             elif self.popup_on_missing_frames and not self.cam_ctl.no_popup:
                 if params.get("frames/missed", 0) > 0 or params.get(
                     "frames/status_line_check", "na"
                 ) not in {"na", "off", "none", "ok"}:
-                    QtWidgets.QMessageBox.warning(
+                    _show_warning(
                         self,
                         "Problems with frames",
                         "Some frames are missing, duplicated, or out of order",
-                        QtWidgets.QMessageBox.Ok,
                     )
             self.w["saving"].set_value(False, notify_value_change=False)
             self.message_log_window.on_stop_recording()

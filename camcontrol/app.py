@@ -65,6 +65,7 @@ except ImportError:
 
 
 from camcontrol import plugins, services, splash
+from camcontrol.cameras.base import make_device_errors_non_fatal
 from camcontrol.cameras.loader import camera_descriptors
 from camcontrol.gui import (
     ActivityIndicator_ctl,
@@ -78,6 +79,7 @@ from camcontrol.gui import (
     camera_control,
     color_theme,
     error_message,
+    image_view,
     settings_editor,
 )
 from camcontrol.resources import resource_path
@@ -251,9 +253,30 @@ class StandaloneFrame(container.QWidgetContainer):
         self.cam_ctl.add_child("plotter_area", self.image_plotter_area, gui_values_path=False)
         self.cam_ctl.add_child("plotter_ctl", self.image_plotter_ctl, gui_values_path="img")
         self.image_plotter_ctl.set_img_lim(-65536, 65536)
+        self.image_view = image_view.ImageViewController(self.image_plotter_area)
+        normalize = self.image_plotter_ctl.params.w["normalize"]
+        normalize.setText("Auto levels")
+        normalize.setToolTip("Scale the display range to each frame's minimum and maximum")
         self.image_plotter_area.set_colormap("gray_sat")
         # Image panel: plotter controls and display settings
         image_panel = self.panels["image"]
+        view_params = image_panel.add_child(
+            "image_view_params", param_table.ParamTable(self), gui_values_path="view"
+        )
+        view_params.setup(add_indicator=False)
+        view_params.add_combo_box(
+            "colormap",
+            label="Colormap:",
+            options=list(image_view.COLORMAPS.values()),
+            index_values=list(image_view.COLORMAPS),
+            value="gray_sat",
+        )
+        view_params.vs["colormap"].connect(controller.exsafe(self.image_plotter_area.set_colormap))
+        view_params.add_button("fit_view", "Fit image to view")
+        view_params.vs["fit_view"].connect(controller.exsafe(lambda _=None: self.image_view.fit()))
+        view_params.w["fit_view"].setToolTip(
+            "Show the whole image again after zooming (mouse wheel) or panning (drag)"
+        )
         image_panel.add_group_box("image_ctl_box", caption="Image settings").add_to_layout(
             self.image_plotter_ctl
         )
@@ -600,6 +623,13 @@ class StandaloneFrame(container.QWidgetContainer):
             tip="Scale the display to each frame's min/max",
         )
         add(
+            "fit_view",
+            "Fit &view",
+            self.image_view.fit,
+            shortcut="Ctrl+0",
+            tip="Show the whole image (after zooming with the mouse wheel or panning)",
+        )
+        add(
             "full_screen",
             "&Full screen",
             self.set_full_screen,
@@ -670,6 +700,7 @@ class StandaloneFrame(container.QWidgetContainer):
             view_menu.addAction(self.docks[name].toggleViewAction())
         view_menu.addSeparator()
         view_menu.addAction(a["auto_levels"])
+        view_menu.addAction(a["fit_view"])
         view_menu.addAction(a["full_screen"])
         view_menu.addAction(a["reset_layout"])
         self._view_menu = view_menu
@@ -693,6 +724,7 @@ class StandaloneFrame(container.QWidgetContainer):
             "record",
             None,
             "auto_levels",
+            "fit_view",
         ]:
             toolbar.addSeparator() if name is None else toolbar.addAction(self.actions[name])
         self._view_menu.insertAction(self.actions["auto_levels"], toolbar.toggleViewAction())
@@ -700,11 +732,12 @@ class StandaloneFrame(container.QWidgetContainer):
     def _setup_status_bar(self):
         status_bar = self.window.statusBar()
         self._status_labels = {}
-        for name in ["camera", "fps", "saving"]:
+        for name in ["camera", "fps", "saving", "pixel"]:
             label = QtWidgets.QLabel(status_bar)
             label.setContentsMargins(6, 0, 6, 0)
             status_bar.addWidget(label)
             self._status_labels[name] = label
+        self.image_view.pixel_hovered.connect(self._status_labels["pixel"].setText)
         self.activity_indicator = ActivityIndicator_ctl.ActivityIndicator_GUI(status_bar)
         self.add_child(
             "activity_indicator",
@@ -732,9 +765,13 @@ class StandaloneFrame(container.QWidgetContainer):
         text = self._connection_text.get(connection, str(connection).capitalize())
         if connected:
             text += " · " + ("Acquiring" if acquiring else "Idle")
-        self._status_labels["camera"].setText(text)
-        self._status_labels["camera"].setStyleSheet(
-            "" if connected else "background: gold; color: black; font-weight: bold"
+        error = None if connected else dev.v["device_error"]
+        camera_label = self._status_labels["camera"]
+        camera_label.setText(text + (" · camera error" if error else ""))
+        camera_label.setToolTip(error or "")
+        background = "#ff6b6b" if error else "gold"
+        camera_label.setStyleSheet(
+            "" if connected else f"background: {background}; color: black; font-weight: bold"
         )
         # values are None until the first acquisition / display update
         fps = (dev.v["frames/fps"] or 0) if acquiring else 0
@@ -971,7 +1008,7 @@ class StandaloneFrame(container.QWidgetContainer):
     def set_gui_level(self, level):
         """Set GUI detail level (either ``"full"`` for all controls, or ``"simplified"`` for essentials)"""
         self.gui_level = level
-        if level == "simple":
+        if level in {"simple", "simplified"}:
             self.control_tabs.remove_tab("proc_tab")
 
     def _update_plugin_parameters(self):
@@ -1421,7 +1458,7 @@ def start_app(ask_on_no_cam=True):
         plugin_manager.sync_plugins()
         start_threads(settings, cam_desc)
         plugin_manager.unlock_barrier("plugin_preinit")
-        cam_ctl = cam_desc.make_thread(cam_thread)
+        cam_ctl = make_device_errors_non_fatal(cam_desc.make_thread(cam_thread))
         cam_ctl.start()
         main_form.setup(
             settings=settings,

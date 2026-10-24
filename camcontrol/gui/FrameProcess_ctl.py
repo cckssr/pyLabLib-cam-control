@@ -42,6 +42,10 @@ class FrameProccess_GUI(container.QGroupBoxContainer):
             label="Frames step:",
             add_indicator=True,
         )
+        self.params.w["comb_count"].setToolTip("Number of frames combined into the background")
+        self.params.w["comb_step"].setToolTip(
+            "Use every n-th frame for the background (1 = consecutive frames)"
+        )
         self.params.add_combo_box(
             "comb_mode",
             options=["Mean", "Median", "Min"],

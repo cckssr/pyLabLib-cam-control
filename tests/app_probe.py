@@ -65,6 +65,8 @@ def main():
         results["frames_acquired"] = cam.v["frames/acquired"]
         results["fps"] = cam.v["frames/fps"]
         results["acquisition"] = cam.v["status/acquisition"]
+        results["connection_after"] = cam.v["status/connection"]
+        results["device_error"] = cam.v["device_error"] if "device_error" in cam.v else None
         cam.ca.acq_stop()
         results["running_threads"] = sorted(controller._running_threads)
         finish()

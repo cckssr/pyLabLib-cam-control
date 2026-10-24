@@ -40,7 +40,7 @@ class PlotControl_GUI(container.QGroupBoxContainer):
             1,
             limiter=(1, None, "coerce", "int"),
             formatter=("int"),
-            label="Calculate every: ",
+            label="Calculate every (frames): ",
         )
         self.params.add_check_box("roi/enable", "Use ROI").get_value_changed_signal().connect(
             self.setup_roi
@@ -87,7 +87,7 @@ class PlotControl_GUI(container.QGroupBoxContainer):
             1000,
             limiter=(1, None, "coerce", "int"),
             formatter=("int"),
-            label="Display last: ",
+            label="Display last (points): ",
         )
         self.params.add_button("reset_history", "Reset history").get_value_changed_signal().connect(
             lambda: self.channel_accumulator.ca.reset()

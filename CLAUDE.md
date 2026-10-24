@@ -261,6 +261,25 @@ group). The old position-based tutorial was removed. Base classes every camera-s
 GUI subclasses: `base_cam_ctl_gui.ICameraSettings_GUI` / `GenericCameraSettings_GUI` /
 `GenericCameraStatus_GUI`.
 
+### Error handling and image view
+
+pylablib stops the whole application on any exception in a thread controller. The camera
+thread created in `app.py` gets `cameras/base.py`'s `DeviceErrorTolerantThreadMixin` (via
+`make_device_errors_non_fatal`, which swaps in a subclass on the not-yet-started thread
+object, so it applies to every backend): a `self.DeviceError` during acquisition, the
+periodic parameter poll or `apply_parameters` ends the acquisition, is logged and stored in
+the `device_error` thread variable (shown in the status bar), and closes the camera via a
+queued `close` command (closing from inside the acquisition job would re-enter pylablib's
+batch-job machinery). The poll's `open()` then reconnects automatically when possible.
+Backends must therefore raise their device's `Error` class (a `DeviceError`) for anything
+recoverable -- see `ThorlabsTSIDirect`'s `_translate_errors`.
+
+`gui/image_view.py`'s `ImageViewController` wraps pylablib's `ImagePlotter`: mouse
+zoom/pan re-enabled, `ImageView.setImage` wrapped so the view only auto-fits new frames
+until the user zooms/pans (Fit view, Ctrl+0, re-enables it), and the value under the cursor
+reported to the status bar in displayed-image coordinates (same as the crosshair lines).
+The colormap selector is the `view/colormap` value in the Image dock.
+
 ### Resources (`camcontrol/resources/`)
 
 `resource_path(name)` (in `camcontrol/resources/__init__.py`) resolves a

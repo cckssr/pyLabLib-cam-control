@@ -126,3 +126,74 @@ class ICameraDescriptor:
     def make_gui_status(self, parent):
         """Create GUI status table with the given parent widget"""
         raise NotImplementedError
+
+
+class DeviceErrorTolerantThreadMixin:
+    """
+    Mixin for camera device threads: a device error closes the camera instead of the application.
+
+    pylablib stops the whole application on any exception in a thread controller. With this
+    mixin, a device error (``self.DeviceError``, e.g. a camera that was unplugged) raised
+    while acquiring, polling or applying parameters ends the acquisition, is printed to the
+    error log and stored in the ``device_error`` thread variable, and the camera is closed
+    ("Disconnected"). The thread's periodic parameter update then keeps trying to reopen it,
+    so a camera that comes back reconnects by itself. Use :func:`make_device_errors_non_fatal`
+    to apply it to an existing thread object.
+    """
+
+    _failed_acquisition_error = None
+
+    def _on_device_error(self, err):
+        msg = f"{type(err).__name__}: {err}"
+        print(f"Camera '{self.name}' error, disconnecting: {msg}", file=sys.stderr)
+        self.v["device_error"] = msg
+        # Queued as a command rather than called here: this may run inside the acquisition
+        # job, which closing the device would have to stop and finalize re-entrantly
+        self.ca.close()
+
+    def setup_open_device(self):
+        result = super().setup_open_device()
+        self.v["device_error"] = None
+        return result
+
+    def acq_loop(self, name, **kwargs):
+        try:
+            yield from super().acq_loop(name, **kwargs)
+        except self.DeviceError as err:
+            self._failed_acquisition_error = err  # reported once the loop is finalized
+
+    def acq_finalize(self, name, **kwargs):
+        err, self._failed_acquisition_error = self._failed_acquisition_error, None
+        if err is None:
+            try:
+                return super().acq_finalize(name, **kwargs)
+            except self.DeviceError as exc:
+                err = exc
+        # the device is broken: skip the regular finalization, which would talk to it
+        self._running_loop = None
+        self._reset_frame_counters()
+        self._set_acquisition_status("stopped")
+        self._on_device_error(err)
+
+    def update_parameters(self):
+        try:
+            return super().update_parameters()
+        except self.DeviceError as err:
+            self._on_device_error(err)
+            parameters = self._get_disconnected_parameters()
+            self.set_variable("parameters", parameters, update=True, notify=True)
+            return parameters
+
+    def apply_parameters(self, *args, **kwargs):
+        try:
+            return super().apply_parameters(*args, **kwargs)
+        except self.DeviceError as err:
+            self._on_device_error(err)
+
+
+def make_device_errors_non_fatal(thread):
+    """Give a (not yet started) camera thread object the :class:`DeviceErrorTolerantThreadMixin`"""
+    cls = type(thread)
+    if not issubclass(cls, DeviceErrorTolerantThreadMixin):
+        thread.__class__ = type(cls.__name__, (DeviceErrorTolerantThreadMixin, cls), {})
+    return thread
