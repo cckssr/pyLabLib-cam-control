@@ -58,9 +58,16 @@ def detect_all(verbose=False):
     cams = dictionary.Dictionary()
     root_descriptors = [d for d in camera_descriptors.values() if d._expands is None]
     for c in root_descriptors:
-        cams.update(
-            c.detect(verbose=verbose, camera_descriptors=list(camera_descriptors.values())) or {}
-        )
+        try:
+            detected = c.detect(
+                verbose=verbose, camera_descriptors=list(camera_descriptors.values())
+            )
+        except Exception as e:
+            # One misbehaving backend (vendor SDK error, odd USB device) must not abort the
+            # detection of all the others
+            print(f"Error detecting {c._cam_kind} cameras: {e!r}", file=sys.stderr)
+            continue
+        cams.update(detected or {})
     if cams:
         for c in cams:
             if "display_name" not in cams[c]:
@@ -72,7 +79,7 @@ def update_settings_file(
     cfg_path="settings.cfg", verbose=False, do_save=True, confirm=False, wait=False
 ):
     settings = detect_all(verbose=verbose)
-    if not settings:
+    if not settings.get("cameras"):
         if verbose:
             print("Couldn't detect any supported cameras")
     elif do_save:

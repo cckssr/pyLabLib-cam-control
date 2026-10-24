@@ -307,7 +307,7 @@ def u16to12nb2d(barr):
             out[i, j * 3] = barr[i, j * 2] & 0xFF
             out[i, j * 3 + 1] = ((barr[i, j * 2] >> 8) & 0x0F) | ((barr[i, j * 2 + 1] & 0x0F) << 4)
             out[i, j * 3 + 2] = (barr[i, j * 2 + 1] >> 4) & 0xFF
-        if width % 2 == 1:
+        if s % 2 == 1:
             out[i, width - 2] = barr[i, chwidth * 2] & 0xFF
             out[i, width - 1] = (barr[i, chwidth * 2] >> 8) & 0x0F
     return out
@@ -621,13 +621,14 @@ class FrameSaveThread(controller.QTaskThread):
                     self.signal_error(err.kind)
                     self.save_stop()
                     self._save_queue.clear()
-                    self.queue_empty = True
+                    queue_empty = True
                 except OSError as err:
                     self.signal_error("write_os_error", desc=str(err))
                     self.save_stop()
                     self._save_queue.clear()
-                    self.queue_empty = True
-                self.v["saved"] += sum([msg.nframes() for msg in new_chunk])
+                    queue_empty = True
+                else:
+                    self.v["saved"] += sum([msg.nframes() for msg in new_chunk])
                 append = True
             if queue_empty:
                 if self._stopping:
@@ -867,7 +868,7 @@ class FrameSaveThread(controller.QTaskThread):
                         preamble = "\n\n"
                     else:
                         file_utils.retry_remove(path)
-                preamble = "Timestamp\tElapsed\tIndex\tSaved\tMessage\n"
+                preamble += "Timestamp\tElapsed\tIndex\tSaved\tMessage\n"
                 preamble += "{:.3f}\t{:.3f}\t{:d}\t{:d}\t{}\n".format(
                     self._start_time,
                     0,
@@ -955,7 +956,8 @@ class FrameSaveThread(controller.QTaskThread):
         if self.format in ["cam"]:
             frames = [f for fs in frames for f in fs]
         nsaved = self.v["saved"]
-        self._last_frame = frames[-1][-1, :].copy()
+        # `frames` holds 3D frame stacks, except for "cam" where it was flattened into 2D frames
+        self._last_frame = (frames[-1] if self.format == "cam" else frames[-1][-1]).copy()
         if self.format == "cam":
             if self.filesplit is None:
                 path = self._make_path()
@@ -1188,6 +1190,11 @@ class FrameSaveThread(controller.QTaskThread):
             self.signal_error()
         except OSError as err:
             self.signal_error("write_os_error", desc=str(err))
+            self.save_stop()
+        except Exception as err:
+            # Anything else (e.g. a settings-manager failure) would otherwise leave the status
+            # stuck at "starting" with `_saving` set and nothing written
+            self.signal_error("write_os_error", desc=f"{type(err).__name__}: {err}")
             self.save_stop()
         if self._pretrigger_buffer is not None:
             if not self._clear_pretrigger_on_write:
