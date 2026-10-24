@@ -17,11 +17,10 @@ Parameters (all optional): ``family`` (``zelux`` or ``cs``), ``color``, ``model`
 
 import functools
 
-from ..gui.base_cam_ctl_gui import GenericCameraStatus_GUI
 from ..thorlabs_tsi.camera import TsiCamera
 from ..thorlabs_tsi.fake import FakeFaults, FakeTsiBus, FakeTsiDevice
 from .base import ICameraDescriptor
-from .ThorlabsTSIDirect import Settings_GUI, ThorlabsTSICamera, ThorlabsTSICameraThread
+from .ThorlabsTSIDirect import Settings_GUI, Status_GUI, ThorlabsTSICamera, ThorlabsTSICameraThread
 
 
 class ThorlabsTSIMockCameraThread(ThorlabsTSICameraThread):
@@ -78,4 +77,4 @@ class ThorlabsTSIMockCameraDescriptor(ICameraDescriptor):
         return Settings_GUI(parent, cam_desc=self)
 
     def make_gui_status(self, parent):
-        return GenericCameraStatus_GUI(parent, cam_desc=self)
+        return Status_GUI(parent, cam_desc=self)

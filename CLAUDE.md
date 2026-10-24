@@ -152,10 +152,20 @@ to the camera directly over USB via `camcontrol/thorlabs_tsi/` — a vendored,
 reverse-engineered driver (ASCII command channel + bulk image endpoint, no
 vendor SDK/DLL, `pyusb`/libusb only) — needs the `thorlabs-tsi` extra
 (`pip install -e .[thorlabs-tsi]`). Both register and coexist; pick per-camera
-in `settings.cfg`. The direct-USB backend covers basic streaming only (ROI,
-exposure, gain) — no binning, no hardware triggering, and no debayering (a
-color body's frames come back as the raw Bayer mosaic); see
-`camcontrol/thorlabs_tsi/camera.py`'s module docstring for what's covered.
+in `settings.cfg`. The direct-USB backend covers free-running streaming with exposure
+(camera-reported limits), frame-rate control (`frame_period`; 0 = off), gain in dB
+(`gain_db`; the CS-series' discrete `gain.table` steps are resolved to the nearest one),
+black level (Zelux only, detected from the firmware's `discover` list), ROI, on-camera
+binning (CS-series only; the ROI width step keeps the *binned* width a multiple of the
+4-pixel group the 10-bit unpacker needs), per-frame info (`framestamp` = camera frame
+counter, `timestamp_us`), and a `color_mode` setting on color bodies (`raw` Bayer mosaic or
+`rgb` bilinear demosaic in the poll thread, phase-corrected for odd ROI origins, skipped when
+binned; RGB frames flow through the whole pipeline with `chandim=1`). No hardware
+triggering. The status panel (`Status_GUI`) shows model/serial/firmware/sensor and the
+stream counters. Driver errors are re-raised as `ThorlabsTSIError` (a pylablib
+`DeviceError`), so a failed connect shows as "disconnected" instead of ending the thread;
+stream failures surface as `FrameTransferError`, which pylablib's acquisition loop answers
+by restarting acquisition.
 `ThorlabsTSICamera` (in `ThorlabsTSIDirect.py`) adapts the driver's pull-based
 frame queue to pylablib's `IROICamera`/`IExposureCamera` interface with a poll
 thread feeding a ring buffer + `FrameNotifier`, mirroring the callback-driven

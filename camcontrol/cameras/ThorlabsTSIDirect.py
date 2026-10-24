@@ -2,14 +2,16 @@
 
 Alternative to ``ThorlabsTLCam`` (which wraps the vendor SDK/DLL): this backend talks to the
 camera directly over USB via ``camcontrol.thorlabs_tsi``, the vendored reverse-engineered
-driver, so it needs no ThorCam/vendor SDK installation. It covers basic streaming only --
-ROI, exposure, gain -- and does not implement binning, hardware triggering, or the vendor's
-color pipeline; a color body's frames come back as the raw, undemosaiced Bayer mosaic. See
+driver, so it needs no ThorCam/vendor SDK installation. It covers free-running streaming
+with exposure, frame-rate control, gain (in dB), black level (Zelux), ROI, on-camera
+binning (CS-series) and an optional bilinear demosaic of color bodies' Bayer mosaic; it does
+not implement hardware triggering or the vendor's color pipeline. See
 ``camcontrol/thorlabs_tsi/camera.py`` and its ``protocol.md`` for what is and isn't covered.
 """
 
 import collections
 import functools
+import math
 import sys
 import threading
 
@@ -22,11 +24,20 @@ from pylablib.thread.devices.generic.camera import GenericCameraThread
 from ..gui import cam_gui_parameters
 from ..gui.base_cam_ctl_gui import GenericCameraSettings_GUI, GenericCameraStatus_GUI
 from ..thorlabs_tsi.camera import TsiCamera, discover_available_cameras
-from ..thorlabs_tsi.protocol import CommandError
+from ..thorlabs_tsi.frames import BAYER_PATTERNS, debayer_bilinear
+from ..thorlabs_tsi.protocol import PIXEL_GROUP_PIXELS, CommandError
 from ..thorlabs_tsi.transport import StreamDesyncError
 from .base import ICameraDescriptor
 
-TDeviceInfo = collections.namedtuple("TDeviceInfo", ["model", "serial_number"])
+TDeviceInfo = collections.namedtuple(
+    "TDeviceInfo", ["model", "serial_number", "firmware_version", "name"]
+)
+TSensorInfo = collections.namedtuple(
+    "TSensorInfo", ["width", "height", "bit_depth", "bayer_pattern"]
+)
+TFrameInfo = collections.namedtuple("TFrameInfo", ["frame_index", "framestamp", "timestamp_us"])
+
+COLOR_MODES = {"raw": "Raw (Bayer mosaic)", "rgb": "RGB (demosaiced)"}
 
 
 class ThorlabsTSIError(comm_backend.DeviceError):
@@ -58,7 +69,23 @@ def _translate_errors(func):
     return wrapped
 
 
-class ThorlabsTSICamera(cam_iface.IROICamera, cam_iface.IExposureCamera):
+def _shifted_bayer_phase(phase, x0, y0):
+    """The ``color_filter_phase`` name for an image starting at sensor pixel ``(x0, y0)``.
+
+    The camera reports the color at the full frame's origin; an ROI starting on an odd row or
+    column sees the 2x2 tile shifted by one, which demosaicing with the unshifted tile would
+    turn into swapped colors.
+    """
+    tl, tr, bl, br = BAYER_PATTERNS[phase]
+    if x0 % 2:
+        tl, tr, bl, br = tr, tl, br, bl
+    if y0 % 2:
+        tl, tr, bl, br = bl, br, tl, tr
+    names = {pattern: name for name, pattern in BAYER_PATTERNS.items()}
+    return names[tl + tr + bl + br]
+
+
+class ThorlabsTSICamera(cam_iface.IBinROICamera, cam_iface.IExposureCamera):
     """
     Thorlabs TSI scientific camera, accessed directly over USB (no vendor SDK/DLL).
 
@@ -75,6 +102,8 @@ class ThorlabsTSICamera(cam_iface.IROICamera, cam_iface.IExposureCamera):
     Error = ThorlabsTSIError
     TimeoutError = ThorlabsTSITimeoutError
     FrameTransferError = ThorlabsTSIFrameTransferError
+    _TFrameInfo = TFrameInfo
+    _frameinfo_fields = TFrameInfo._fields
 
     def __init__(self, serial=None, pid=None, camera_factory=None):
         super().__init__()
@@ -84,6 +113,7 @@ class ThorlabsTSICamera(cam_iface.IROICamera, cam_iface.IExposureCamera):
         self._tsi = None
         self._sensor_size = None
         self._roi_min_size = None
+        self._color_mode = "raw"
         self._poll_thread = None
         self._poll_error = None
         self._stop_poll = threading.Event()
@@ -92,8 +122,16 @@ class ThorlabsTSICamera(cam_iface.IROICamera, cam_iface.IExposureCamera):
         self._frames = collections.deque()
         self.open()
         self._add_info_variable("device_info", self.get_device_info)
-        self._add_info_variable("gain_range", self._get_gain_range, ignore_error=Exception)
-        self._add_settings_variable("gain", self.get_gain, self.set_gain)
+        self._add_info_variable("sensor_info", self.get_sensor_info)
+        self._add_info_variable("gain_range", self.get_gain_range)
+        self._add_status_variable("exposure_range", self.get_exposure_range)
+        self._add_settings_variable("frame_period", self.get_frame_period, self.set_frame_period)
+        self._add_settings_variable("gain_db", self.get_gain_db, self.set_gain_db)
+        if self._caps["black_level"]:
+            self._add_info_variable("black_level_range", self.get_black_level_range)
+            self._add_settings_variable("black_level", self.get_black_level, self.set_black_level)
+        if self._caps["bayer_phase"] is not None:
+            self._add_settings_variable("color_mode", self.get_color_mode, self.set_color_mode)
         self._add_status_variable("stream_stats", self._get_stream_stats, ignore_error=Exception)
 
     def _get_connection_parameters(self):
@@ -120,10 +158,27 @@ class ThorlabsTSICamera(cam_iface.IROICamera, cam_iface.IExposureCamera):
                 tsi.commands.stop()
             except CommandError:
                 pass
+            self._caps = self._probe_capabilities(tsi)
         except (CommandError, usb.core.USBError) as exc:
             tsi.close()  # don't leak the interface claim of a half-opened camera
             raise ThorlabsTSIError(f"could not initialize camera: {exc}") from exc
         self._tsi = tsi
+
+    @staticmethod
+    def _probe_capabilities(tsi):
+        """Which optional features this camera has (they differ by family and model)"""
+        try:
+            supported = set(tsi.commands.supported())
+        except CommandError:
+            supported = None
+        gain_table = tsi.commands.get_gain_table()
+        return {
+            # the firmware's own command list is authoritative; the family is the fallback
+            "black_level": "blklvl" in supported if supported else tsi.is_zelux,
+            "max_bin": (tsi.binx_range[1], tsi.biny_range[1]),
+            "bayer_phase": tsi.color_filter_phase if tsi.is_color else None,
+            "gain_table": gain_table,
+        }
 
     def close(self):
         if self._tsi is not None:
@@ -141,37 +196,140 @@ class ThorlabsTSICamera(cam_iface.IROICamera, cam_iface.IExposureCamera):
 
     @_translate_errors
     def get_device_info(self):
-        """Return tuple ``(model, serial_number)``."""
-        return TDeviceInfo(self._tsi.model, self._tsi.serial_number)
+        """Return tuple ``(model, serial_number, firmware_version, name)``."""
+        return TDeviceInfo(
+            self._tsi.model,
+            self._tsi.serial_number,
+            self._query_optional(lambda: self._tsi.firmware_version),
+            self._query_optional(lambda: self._tsi.name),
+        )
 
-    ### Exposure ###
+    @_translate_errors
+    def get_sensor_info(self):
+        """Return tuple ``(width, height, bit_depth, bayer_pattern)``; ``bayer_pattern`` is
+        the 2x2 tile at the sensor origin (e.g. ``"RGGB"``) or ``None`` on a mono camera."""
+        width, height = self._get_sensor_size()
+        phase = self._caps["bayer_phase"]
+        return TSensorInfo(
+            width,
+            height,
+            self._query_optional(lambda: self._tsi.bit_depth),
+            None if phase is None else BAYER_PATTERNS.get(phase, phase),
+        )
+
+    @staticmethod
+    def _query_optional(getter):
+        try:
+            return getter()
+        except CommandError:
+            return None
+
+    ### Exposure and frame rate ###
     @_translate_errors
     def get_frame_timings(self):
         exposure = self._tsi.exposure_time_us * 1e-6
-        frame_period = self._tsi.commands.get_frame_time_us() * 1e-6
+        frame_period = self._tsi.frame_time_us * 1e-6
         return self._TAcqTimings(exposure, frame_period)
 
     @_translate_errors
     @cam_iface.acqstopped
     def set_exposure(self, exposure):
-        self._tsi.exposure_time_us = max(1, int(exposure * 1e6))
+        lo, hi = self._tsi.exposure_time_range_us
+        self._tsi.exposure_time_us = int(np.clip(round(exposure * 1e6), lo, hi))
         return self.get_exposure()
 
-    ### Gain ###
     @_translate_errors
-    def get_gain(self):
-        """Raw gain in the camera's own units (see the camera's ``gain.table``, if any)."""
-        return self._tsi.gain
+    def get_exposure_range(self):
+        """Current ``(min, max)`` exposure in seconds; moves with ROI and frame-rate control"""
+        lo, hi = self._tsi.exposure_time_range_us
+        return lo * 1e-6, hi * 1e-6
 
     @_translate_errors
     @cam_iface.acqstopped
-    def set_gain(self, gain):
-        self._tsi.gain = int(gain)
-        return self.get_gain()
+    def set_frame_period(self, frame_period):
+        """Set the frame period via the camera's frame-rate control.
+
+        ``None`` or 0 (or less) switches frame-rate control off, so the camera runs as fast as
+        the exposure and ROI allow. Larger values are clamped to the current allowed range.
+        """
+        if frame_period is None or frame_period <= 0:
+            self._tsi.is_frame_rate_control_enabled = False
+        else:
+            self._tsi.is_frame_rate_control_enabled = True
+            lo, hi = self._tsi.frame_rate_control_period_range_us
+            self._tsi.frame_rate_control_period_us = int(np.clip(round(frame_period * 1e6), lo, hi))
+        return self.get_frame_period()
+
+    ### Gain and black level ###
+    @_translate_errors
+    def get_gain_db(self):
+        """Gain in dB"""
+        return self._tsi.commands.get_gain_db()
 
     @_translate_errors
-    def _get_gain_range(self):
-        return tuple(self._tsi.commands.limits("gain"))
+    @cam_iface.acqstopped
+    def set_gain_db(self, gain_db):
+        """Set the gain in dB; the CS-series only has a few discrete gains, so the nearest
+        one is chosen there"""
+        lo, hi = self._tsi.gain_range
+        table = self._caps["gain_table"]
+        if table:
+            indices = range(max(lo, 0), min(hi, len(table) - 1) + 1)
+            raw = min(indices, key=lambda i: abs(table[i] / 10 - gain_db))
+        else:
+            raw = int(np.clip(round(gain_db * 10), lo, hi))
+        self._tsi.gain = raw
+        return self.get_gain_db()
+
+    @_translate_errors
+    def get_gain_range(self):
+        """``(min, max)`` gain in dB"""
+        lo, hi = self._tsi.gain_range
+        table = self._caps["gain_table"]
+        if table:
+            steps = table[max(lo, 0) : hi + 1]
+            return min(steps) / 10, max(steps) / 10
+        return lo / 10, hi / 10
+
+    @_translate_errors
+    def get_black_level(self):
+        """Black level offset, in the camera's own units (Zelux only)"""
+        return self._tsi.black_level
+
+    @_translate_errors
+    @cam_iface.acqstopped
+    def set_black_level(self, level):
+        lo, hi = self._tsi.black_level_range
+        self._tsi.black_level = int(np.clip(level, lo, hi))
+        return self.get_black_level()
+
+    @_translate_errors
+    def get_black_level_range(self):
+        return tuple(self._tsi.black_level_range)
+
+    ### Color ###
+    def get_color_mode(self):
+        """``"raw"`` (the sensor's Bayer mosaic) or ``"rgb"`` (bilinear demosaic); color
+        bodies only"""
+        return self._color_mode
+
+    @cam_iface.acqcleared
+    def set_color_mode(self, mode):
+        if mode not in COLOR_MODES:
+            raise ValueError(f"unknown color mode {mode!r}; expected one of {list(COLOR_MODES)}")
+        if self._caps["bayer_phase"] is not None:
+            self._color_mode = mode
+        return self._color_mode
+
+    def _debayer_phase(self):
+        """The Bayer phase to demosaic frames with, or ``None`` to keep them raw"""
+        phase = self._caps["bayer_phase"]
+        if phase is None or self._color_mode != "rgb":
+            return None
+        hstart, _, vstart, _, hbin, vbin = self.get_roi()
+        if hbin > 1 or vbin > 1:
+            return None  # binning mixes the mosaic's colors; there is nothing to demosaic
+        return _shifted_bayer_phase(phase, hstart, vstart)
 
     def _get_stream_stats(self):
         """Counters from the underlying USB reader thread (frames missed/truncated/dropped,
@@ -205,15 +363,24 @@ class ThorlabsTSICamera(cam_iface.IROICamera, cam_iface.IExposureCamera):
     @_translate_errors
     def get_roi(self):
         x0, y0, x1, y1 = self._tsi.roi
-        return x0, x1 + 1, y0, y1 + 1
+        return x0, x1 + 1, y0, y1 + 1, self._tsi.binx, self._tsi.biny
 
     @_translate_errors
     @cam_iface.acqcleared
-    def set_roi(self, hstart=0, hend=None, vstart=0, vend=None):
-        hlim, vlim = self.get_roi_limits()
-        hstart, hend = self._truncate_roi_axis((hstart, hend), hlim)
-        vstart, vend = self._truncate_roi_axis((vstart, vend), vlim)
+    def set_roi(self, hstart=0, hend=None, vstart=0, vend=None, hbin=1, vbin=1):
+        hlim, vlim = self.get_roi_limits(hbin, vbin)
+        hstart, hend, hbin = self._truncate_roi_axis((hstart, hend, hbin), hlim)
+        vstart, vend, vbin = self._truncate_roi_axis((vstart, vend, vbin), vlim)
+        if hlim.maxbin > 1 or vlim.maxbin > 1:
+            # binning first: the camera trims the ROI to a whole number of super-pixels
+            self._tsi.binx, self._tsi.biny = hbin, vbin
         self._tsi.roi = (hstart, vstart, hend - 1, vend - 1)
+        width = self._tsi.image_width_pixels
+        if width % PIXEL_GROUP_PIXELS:
+            raise ThorlabsTSIError(
+                f"the camera chose an image width of {width} pixels, which is not a multiple of "
+                f"{PIXEL_GROUP_PIXELS}; frames with such widths can't be decoded"
+            )
         return self.get_roi()
 
     @_translate_errors
@@ -222,20 +389,25 @@ class ThorlabsTSICamera(cam_iface.IROICamera, cam_iface.IExposureCamera):
 
         The width step is 16 on the CS-series (its documented quantisation, matching
         ``roi.min``'s 16-pixel minimum); on the Zelux it is the 4-pixel group the 10-bit
-        unpacker needs, since that family's own quantisation is not characterised.
+        unpacker needs, since that family's own quantisation is not characterised. With
+        binning, the step also keeps the *binned* width a multiple of that group.
         """
         w, h = self._get_sensor_size()
         min_w, min_h = self._roi_min_size
-        wstep = 4 if self._tsi.is_zelux else 16
+        max_hbin, max_vbin = self._caps["max_bin"]
+        hbin = max(1, min(hbin, max_hbin))
+        vbin = max(1, min(vbin, max_vbin))
+        wstep = math.lcm(4 if self._tsi.is_zelux else 16, PIXEL_GROUP_PIXELS * hbin)
         min_w = max(wstep, -(-min_w // wstep) * wstep)
+        min_h = max(vbin, -(-min_h // vbin) * vbin)
         return (
-            cam_iface.TAxisROILimit(min_w, w, 1, wstep, 1),
-            cam_iface.TAxisROILimit(min_h, h, 1, 1, 1),
+            cam_iface.TAxisROILimit(min_w, w, 1, wstep, max_hbin),
+            cam_iface.TAxisROILimit(min_h, h, 1, vbin, max_vbin),
         )
 
     def _get_data_dimensions_rc(self):
-        roi = self.get_roi()
-        return roi[3] - roi[2], roi[1] - roi[0]
+        hstart, hend, vstart, vend, hbin, vbin = self.get_roi()
+        return (vend - vstart) // vbin, (hend - hstart) // hbin
 
     ### Acquisition process controls ###
     def setup_acquisition(self, nframes=100):  # pylint: disable=arguments-differ
@@ -260,9 +432,10 @@ class ThorlabsTSICamera(cam_iface.IROICamera, cam_iface.IExposureCamera):
         self._frame_counter.reset(nframes)
         self._poll_error = None
         self._stop_poll.clear()
+        debayer_phase = self._debayer_phase()
         self._tsi.arm(frames_to_buffer=min(nframes, 16))
         self._poll_thread = threading.Thread(
-            target=self._poll_loop, name="thorlabs-tsi-poll", daemon=True
+            target=self._poll_loop, args=(debayer_phase,), name="thorlabs-tsi-poll", daemon=True
         )
         self._poll_thread.start()
 
@@ -277,7 +450,7 @@ class ThorlabsTSICamera(cam_iface.IROICamera, cam_iface.IExposureCamera):
     def acquisition_in_progress(self):
         return self._poll_thread is not None
 
-    def _poll_loop(self):
+    def _poll_loop(self, debayer_phase=None):
         """Drain decoded frames off the camera's own reader thread into our ring buffer.
 
         ``TsiCamera`` already runs a dedicated USB reader thread and queues whole decoded
@@ -285,11 +458,17 @@ class ThorlabsTSICamera(cam_iface.IROICamera, cam_iface.IExposureCamera):
         off with ``get_pending_frame_or_null`` and publish them the way pylablib expects
         (mirroring the vendor-SDK backend's callback-driven ring buffer in
         ``pylablib.devices.Thorlabs.TLCamera.ThorlabsTLCamera.RingBuffer``, adapted to a pull
-        loop since this driver has no native callback).
+        loop since this driver has no native callback). Demosaicing, if enabled, happens here
+        too, off the camera thread.
         """
         while not self._stop_poll.is_set():
             try:
                 frame = self._tsi.get_pending_frame_or_null(timeout=0.2)
+                if frame is None:
+                    continue
+                image = frame.image
+                if debayer_phase is not None:
+                    image = debayer_bilinear(image, debayer_phase)
             except StreamDesyncError as exc:
                 # By design recoverable: the assembler only ever emits chunk-aligned frames,
                 # so the *next* one already starts realigned -- see get_pending_frame_or_null's
@@ -309,10 +488,9 @@ class ThorlabsTSICamera(cam_iface.IROICamera, cam_iface.IExposureCamera):
                 print(f"ThorlabsTSIDirect: stream failed: {exc!r}", file=sys.stderr)
                 self._poll_error = ThorlabsTSIError(f"stream failed: {type(exc).__name__}: {exc}")
                 break
-            if frame is None:
-                continue
+            stamp = None if frame.timestamp_ns is None else int(frame.timestamp_ns // 1000)
             with self._buffer_lock:
-                self._frames.append(frame.image)
+                self._frames.append((image, frame.frame_count, stamp))
                 self._frame_notifier.inc()
 
     def _check_poll_error(self):
@@ -337,19 +515,49 @@ class ThorlabsTSICamera(cam_iface.IROICamera, cam_iface.IExposureCamera):
                 raise ThorlabsTSIFrameTransferError(
                     f"frames {rng[0]}..{base - 1} were overwritten before they could be read"
                 )
-            frames = [self._frames[n - base] for n in range(*rng)]
-        return frames, None
+            entries = [self._frames[n - base] for n in range(*rng)]
+        frames = [image for image, _, _ in entries]
+        infos = None
+        if return_info:
+            infos = [
+                TFrameInfo(n, -1 if count is None else count, -1 if stamp is None else stamp)
+                for n, (_, count, stamp) in zip(range(*rng), entries, strict=True)
+            ]
+        # frames carry a trailing color dimension when demosaiced
+        return frames, infos, (frames[0].ndim - 2 if frames else 0)
 
     def _zero_frame(self, n):
         rows, cols = self._get_data_dimensions_rc()
-        return np.zeros((n, rows, cols), dtype=self._default_image_dtype)
+        channels = (3,) if self._debayer_phase() is not None else ()
+        return np.zeros((n, rows, cols) + channels, dtype=self._default_image_dtype)
 
 
-class GainParameter(cam_gui_parameters.IntGUIParameter):
-    """ThorlabsTSIDirect gain parameter; receives its value range from the camera."""
+class ExposureParameter(cam_gui_parameters.FloatGUIParameter):
+    """Exposure parameter whose limits come from the camera"""
 
     def __init__(self, settings):
-        super().__init__(settings, "gain", "Gain (raw)")
+        super().__init__(
+            settings,
+            "exposure",
+            "Exposure (ms)",
+            limit=(0, None),
+            fmt=".3f",
+            default=10,
+            factor=1e3,
+        )
+
+    def setup(self, parameters, full_info):
+        super().setup(parameters, full_info)
+        if "exposure_range" in full_info:
+            lo, hi = full_info["exposure_range"]
+            self.base.w[self.gui_name].set_limiter((lo * self.factor, hi * self.factor))
+
+
+class GainParameter(cam_gui_parameters.FloatGUIParameter):
+    """Gain (dB) parameter whose limits come from the camera"""
+
+    def __init__(self, settings):
+        super().__init__(settings, "gain_db", "Gain (dB)", fmt=".1f")
 
     def setup(self, parameters, full_info):
         super().setup(parameters, full_info)
@@ -357,17 +565,73 @@ class GainParameter(cam_gui_parameters.IntGUIParameter):
             self.base.w[self.gui_name].set_limiter(full_info["gain_range"])
 
 
+class BlackLevelParameter(cam_gui_parameters.IntGUIParameter):
+    """Black level parameter whose limits come from the camera (Zelux only)"""
+
+    def __init__(self, settings):
+        super().__init__(settings, "black_level", "Black level")
+
+    def setup(self, parameters, full_info):
+        super().setup(parameters, full_info)
+        if "black_level_range" in full_info:
+            self.base.w[self.gui_name].set_limiter(full_info["black_level_range"])
+
+
 class Settings_GUI(GenericCameraSettings_GUI):
+    _frame_period_kind = "value"
+    _bin_kind = "both"
+
     def get_basic_parameters(self, name):
-        if name == "gain":
-            return GainParameter(self)
+        if name == "exposure":
+            return ExposureParameter(self)
         if name == "trigger_mode":
             return None  # only free-running acquisition is implemented
         return super().get_basic_parameters(name)
 
     def setup_settings_tables(self):
         super().setup_settings_tables()
-        self.add_builtin_parameter("gain", "advanced")
+        self.add_parameter(GainParameter(self), "common")
+        self.add_parameter(BlackLevelParameter(self), "advanced")
+        self.add_parameter(
+            cam_gui_parameters.EnumGUIParameter(self, "color_mode", "Color output", COLOR_MODES),
+            "advanced",
+        )
+
+
+class Status_GUI(GenericCameraStatus_GUI):
+    _stream_counters = {
+        "frames_missed": "Frames missed (camera)",
+        "frames_truncated": "Frames truncated",
+        "frames_dropped_by_consumer": "Frames dropped (host)",
+        "read_errors": "USB read errors",
+    }
+
+    def setup_status_table(self):
+        self.add_text_label("model", label="Model:")
+        self.add_text_label("serial_number", label="Serial number:")
+        self.add_text_label("firmware_version", label="Firmware:")
+        self.add_text_label("sensor", label="Sensor:")
+        for name, label in self._stream_counters.items():
+            self.add_num_label(f"stream/{name}", formatter="int", label=f"{label}:")
+
+    def show_parameters(self, params):
+        super().show_parameters(params)
+        if "device_info" in params:
+            info = params["device_info"]
+            self.v["model"] = info.model
+            self.v["serial_number"] = info.serial_number
+            self.v["firmware_version"] = info.firmware_version or "?"
+        if "sensor_info" in params:
+            info = params["sensor_info"]
+            desc = f"{info.width} x {info.height}, {info.bit_depth or '?'} bit"
+            self.v["sensor"] = desc + (
+                f", {info.bayer_pattern} color" if info.bayer_pattern else ", mono"
+            )
+        stats = params.get("stream_stats")
+        for name in self._stream_counters:
+            value = stats.get(name, 0) if stats else 0
+            self.v[f"stream/{name}"] = value
+            self.w[f"stream/{name}"].setStyleSheet("color: red; font-weight: bold" if value else "")
 
 
 class ThorlabsTSICameraThread(GenericCameraThread):
@@ -375,13 +639,21 @@ class ThorlabsTSICameraThread(GenericCameraThread):
 
     parameter_variables = GenericCameraThread.parameter_variables | {
         "exposure",
+        "exposure_range",
         "frame_period",
         "detector_size",
         "buffer_size",
         "acq_status",
         "roi_limits",
         "roi",
-        "gain",
+        "gain_db",
+        "gain_range",
+        "black_level",
+        "black_level_range",
+        "color_mode",
+        "device_info",
+        "sensor_info",
+        "stream_stats",
     }
 
     def make_device(self):
@@ -458,4 +730,4 @@ class ThorlabsTSIDirectCameraDescriptor(ICameraDescriptor):
         return Settings_GUI(parent, cam_desc=self)
 
     def make_gui_status(self, parent):
-        return GenericCameraStatus_GUI(parent, cam_desc=self)
+        return Status_GUI(parent, cam_desc=self)

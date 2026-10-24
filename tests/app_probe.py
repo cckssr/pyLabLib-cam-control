@@ -12,6 +12,7 @@ import os
 import sys
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ.setdefault("CAMCONTROL_USE_OPENGL", "0")  # no GL context offscreen
 
 from pylablib.core.gui import QtCore
 from pylablib.core.thread import controller, threadprop

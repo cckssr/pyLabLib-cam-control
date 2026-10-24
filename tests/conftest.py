@@ -3,6 +3,8 @@
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# offscreen Qt has no OpenGL context; pyqtgraph would fail to paint GL-accelerated plots
+os.environ.setdefault("CAMCONTROL_USE_OPENGL", "0")
 
 import pytest
 
