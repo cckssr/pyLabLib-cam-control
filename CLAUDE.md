@@ -66,7 +66,7 @@ On Python 3.14, PySide2/shiboken2 have no distribution at all — use PyQt5.
 
 Declared in `pyproject.toml` with lower-bound pins (not `==`): `pylablib>=1.4.5`,
 `PyQt5>=5.15.11`, `pyqtgraph>=0.14`, `numpy>=2`, `pandas`, `scipy`,
-`numba>=0.61`, `imageio`, `Pillow`, `rpyc`, `qdarkstyle`, `plumbum`, plus
+`numba>=0.61`, `imageio`, `tifffile`, `Pillow`, `rpyc`, `qdarkstyle`, `plumbum`, plus
 `pywin32` on Windows only. Verified installable and working end-to-end on
 Python 3.14 (macOS arm64; Windows expected but not independently verified
 in this environment). `pyusb>=1.2.1,<1.4` is an optional extra (`.[thorlabs-tsi]`),
@@ -240,9 +240,17 @@ ships these files with the wheel.
   commands over TCP and uses peer-supplied `dtype`/`shape` to build a numpy
   array from the payload — bind to loopback or add auth before exposing it on
   a shared network.
-- No CI yet (no `.github/workflows/`).
+
 
 ## Testing
+
+CI (`.github/workflows/ci.yml`) runs ruff check, ruff format check, an import smoke test and
+pytest on Linux/macOS/Windows x Python 3.12-3.14 (`requires-python >=3.12`). The vendored
+`camcontrol/thorlabs_tsi/` is excluded from `ruff format` (kept in upstream's formatting so
+syncs stay small) but still linted. pytest turns `DeprecationWarning`s raised from
+`camcontrol.*` into errors. `camcontrol/_compat.py::apply()` (called from the entry points'
+`main()`, not at import) patches third-party incompatibilities, currently pylablib's use of
+the removed `np.asscalar` when serializing settings.
 
 `tests/` (pytest, install with `pip install -e .[dev]`). `tests/conftest.py`
 sets `QT_QPA_PLATFORM=offscreen` if not already set, since it must happen

@@ -3,12 +3,15 @@ line-length = 100
 
 [format]
 docstring-code-format = true
+# Vendored from upstream tsi-camera, which uses its own formatting; reformatting it here would
+# turn every future upstream sync into a whole-file diff. Still linted.
+exclude = ["camcontrol/thorlabs_tsi/*"]
 
 [lint]
 select = ["E", "F", "W", "I", "UP", "B"]
 ignore = [
     "E501",  # line length handled by formatter
-    "E402",  # control.py/detect.py/splash.py chdir + sys.path.append before imports is intentional
+    "E402",  # entry scripts and tests/conftest.py set up env vars / Qt before further imports
     # Pre-existing findings from before the ruff.toml was added (2026-09), not touched during the
     # Python 3.14 modernization pass to keep that diff mechanical. Real issues, not false
     # positives -- worth a dedicated cleanup pass, each needs per-call-site judgment:

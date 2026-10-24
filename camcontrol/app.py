@@ -107,7 +107,7 @@ def configure_logging():
     sys.stdout = StreamLogger("logout.txt", sys.stdout)
 
 
-from camcontrol import compare_version, version
+from camcontrol import _compat, compare_version, version
 
 _defaults_filename = "defaults.cfg"
 _locals_filename = "locals.cfg"
@@ -1080,6 +1080,7 @@ def main(argv=None, app=None):
     wire up the GUI-mode exception hook; otherwise create a console-mode QApplication.
     """
     configure_logging()
+    _compat.apply()
     global argvp
     argvp = _parse_args(argv)
     execute(app=app)

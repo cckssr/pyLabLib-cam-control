@@ -26,6 +26,7 @@ from pylablib.core.fileio.savefile import save_dict
 from pylablib.core.utils import dictionary
 from pylablib.core.utils import general as general_utils
 
+from camcontrol import _compat
 from camcontrol.cameras.loader import camera_descriptors
 
 ### Redirecting console / errors to file logs ###
@@ -143,6 +144,7 @@ def _parse_args(argv=None):
 def main(argv=None):
     args = _parse_args(argv)
     configure_logging()
+    _compat.apply()
     if not args.silent:
         print("Detecting cameras...\n")
     if os.path.exists(args.config_file):
