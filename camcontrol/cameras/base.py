@@ -137,8 +137,9 @@ class DeviceErrorTolerantThreadMixin:
     while acquiring, polling or applying parameters ends the acquisition, is printed to the
     error log and stored in the ``device_error`` thread variable, and the camera is closed
     ("Disconnected"). The thread's periodic parameter update then keeps trying to reopen it,
-    so a camera that comes back reconnects by itself. Use :func:`make_device_errors_non_fatal`
-    to apply it to an existing thread object.
+    so a camera that comes back reconnects by itself. Device calls made on behalf of other
+    threads (``get_full_info``, ``_device_method``) are covered the same way and return
+    nothing. Use :func:`make_device_errors_non_fatal` to apply it to an existing thread object.
     """
 
     _failed_acquisition_error = None
@@ -149,7 +150,10 @@ class DeviceErrorTolerantThreadMixin:
         self.v["device_error"] = msg
         # Queued as a command rather than called here: this may run inside the acquisition
         # job, which closing the device would have to stop and finalize re-entrantly
-        self.ca.close()
+        try:
+            self.ca.close()
+        except Exception as exc:  # e.g. the thread is already shutting down (and closing)
+            print(f"Camera '{self.name}': could not schedule closing: {exc!r}", file=sys.stderr)
 
     def setup_open_device(self):
         result = super().setup_open_device()
@@ -190,10 +194,53 @@ class DeviceErrorTolerantThreadMixin:
         except self.DeviceError as err:
             self._on_device_error(err)
 
+    def get_full_info(self, *args, **kwargs):
+        try:
+            return super().get_full_info(*args, **kwargs)
+        except self.DeviceError as err:
+            self._on_device_error(err)
+            return dictionary.Dictionary()
+
+    def _device_method(self, *args, **kwargs):
+        try:
+            return super()._device_method(*args, **kwargs)
+        except self.DeviceError as err:
+            self._on_device_error(err)
+            return None
+
+    def close(self, *args, **kwargs):
+        try:
+            return super().close(*args, **kwargs)
+        except self.DeviceError as err:
+            # a broken device may fail to close cleanly; it is gone either way
+            print(f"Camera '{self.name}' error while closing: {err}", file=sys.stderr)
+            self.update_status("connection", "closed", "Disconnected")
+
+
+# Methods pylablib's ``DeviceThread.__init__`` registers as thread commands; the registration
+# binds the method of the class the thread had at that point
+_COMMANDS_BOUND_AT_INIT = (
+    "update_parameters",
+    "apply_parameters",
+    "get_full_info",
+    "_device_method",
+    "close",
+)
+
 
 def make_device_errors_non_fatal(thread):
     """Give a (not yet started) camera thread object the :class:`DeviceErrorTolerantThreadMixin`"""
     cls = type(thread)
-    if not issubclass(cls, DeviceErrorTolerantThreadMixin):
-        thread.__class__ = type(cls.__name__, (DeviceErrorTolerantThreadMixin, cls), {})
+    if issubclass(cls, DeviceErrorTolerantThreadMixin):
+        return thread
+    thread.__class__ = type(cls.__name__, (DeviceErrorTolerantThreadMixin, cls), {})
+    # The thread's constructor already registered some methods as commands, bound to the
+    # original class; a queued call to one of them would bypass the mixin, so rebind them
+    for name in _COMMANDS_BOUND_AT_INIT:
+        command = thread._commands.get(name)
+        if command is None:
+            continue
+        thread.__dict__.pop(name, None)  # the per-instance wrapper made at registration
+        thread._commands[name] = command._replace(command=getattr(thread, name))
+        thread._override_command_method(name)
     return thread

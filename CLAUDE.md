@@ -156,7 +156,7 @@ in `settings.cfg`. The direct-USB backend covers free-running streaming with exp
 (camera-reported limits), frame-rate control (`frame_period`; 0 = off), gain in dB
 (`gain_db`; the CS-series' discrete `gain.table` steps are resolved to the nearest one),
 black level (Zelux only, detected from the firmware's `discover` list), ROI, on-camera
-binning (CS-series only; the ROI width step keeps the *binned* width a multiple of the
+binning (CS-series only; the ROI width step keeps the _binned_ width a multiple of the
 4-pixel group the 10-bit unpacker needs), per-frame info (`framestamp` = camera frame
 counter, `timestamp_us`), and a `color_mode` setting on color bodies (`raw` Bayer mosaic or
 `rgb` bilinear demosaic in the poll thread, phase-corrected for odd ROI origins, skipped when
@@ -270,7 +270,12 @@ object, so it applies to every backend): a `self.DeviceError` during acquisition
 periodic parameter poll or `apply_parameters` ends the acquisition, is logged and stored in
 the `device_error` thread variable (shown in the status bar), and closes the camera via a
 queued `close` command (closing from inside the acquisition job would re-enter pylablib's
-batch-job machinery). The poll's `open()` then reconnects automatically when possible.
+batch-job machinery). Caveat: `DeviceThread.__init__` registers `update_parameters`,
+`apply_parameters`, `get_full_info`, `_device_method` and `close` as thread commands bound
+to the *original* class, so after the class swap `make_device_errors_non_fatal` rebinds
+them (`_COMMANDS_BOUND_AT_INIT`; `tests/test_device_errors.py` checks this). Without that,
+a queued call to one of them bypassed the mixin and an unplugged camera still closed the
+app -- intermittently, depending on timing (seen on CI, not locally). The poll's `open()` then reconnects automatically when possible.
 Backends must therefore raise their device's `Error` class (a `DeviceError`) for anything
 recoverable -- see `ThorlabsTSIDirect`'s `_translate_errors`.
 
@@ -307,7 +312,6 @@ ships these files with the wheel.
   commands over TCP and uses peer-supplied `dtype`/`shape` to build a numpy
   array from the payload — bind to loopback or add auth before exposing it on
   a shared network.
-
 
 ## Testing
 

@@ -67,6 +67,11 @@ def main():
         results["acquisition"] = cam.v["status/acquisition"]
         results["connection_after"] = cam.v["status/connection"]
         results["device_error"] = cam.v["device_error"] if "device_error" in cam.v else None
+        # device calls the camera thread runs as queued commands; with a failed camera, any
+        # of these used to end the application
+        cam.cs.update_parameters()
+        cam.cs.apply_parameters({})
+        cam.cs.get_full_info()
         cam.ca.acq_stop()
         results["running_threads"] = sorted(controller._running_threads)
         finish()

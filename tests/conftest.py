@@ -36,13 +36,21 @@ def run_app_probe():
     def run(directory, config_lines, camera, seconds=2.0):
         config = directory / "settings.cfg"
         config.write_text("\n".join(config_lines) + "\n")
-        proc = subprocess.run(
-            [sys.executable, str(probe), str(config), camera, str(seconds)],
-            cwd=directory,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
+        try:
+            proc = subprocess.run(
+                [sys.executable, str(probe), str(config), camera, str(seconds)],
+                cwd=directory,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+        except subprocess.TimeoutExpired as exc:
+            # typically an unhandled exception: the app then waits on an error dialog
+            log = directory / "logerr.txt"
+            raise AssertionError(
+                "app probe timed out; logerr.txt:\n"
+                + (log.read_text()[-6000:] if log.exists() else "(none)")
+            ) from exc
         for line in proc.stdout.splitlines():
             if line.startswith("APP-PROBE-RESULT "):
                 return json.loads(line.split(" ", 1)[1])
