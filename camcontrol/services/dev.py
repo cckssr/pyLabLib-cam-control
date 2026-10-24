@@ -111,7 +111,7 @@ def take_screenshots(src):
             gui_utils.get_screenshot(window=window).save(
                 sfolder + "interface_camera_attributes_settings.png"
             )
-            src.tutorial_box.close()
+            window.close()
 
 
 def on_key_press(src, event):

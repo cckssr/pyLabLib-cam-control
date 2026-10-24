@@ -52,7 +52,7 @@ class MessageLogWindow(container.QWidgetContainer):
         for r in self._log_results:
             if r.is_call_done():
                 v = r.get_value()[1]
-                vstr = f"[{datetime.datetime.fromtimestamp(v[0]):%Y/%M/%d %H:%M:%S}]  {v[1]:.2f}\n{v[2]}\n\n"
+                vstr = f"[{datetime.datetime.fromtimestamp(v[0]):%Y/%m/%d %H:%M:%S}]  {v[1]:.2f}\n{v[2]}\n\n"
                 self.v["recorded_events"] = self.v["recorded_events"] + vstr
                 self.w["recorded_events"].moveCursor(QtGui.QTextCursor.End)
             else:
@@ -101,7 +101,7 @@ class FormatParametersWindow(container.QWidgetContainer):
             "<i2": "16-bit signed",
             "<u4": "32-bit unsigned",
             "<i4": "32-bit signed",
-            "<f4": "32-but float",
+            "<f4": "32-bit float",
             "<f8": "64-bit float",
         }
         self.raw_params.add_combo_box("dtype", options=raw_dtypes)
@@ -663,7 +663,8 @@ class SaveStatus_GUI(param_table.StatusTable):
                 "ok": "OK",
                 "na": "No frames",
                 "none": "No status line found",
-                "out_of_oder": "Frames out of order",
+                "out_of_oder": "Frames out of order",  # pylablib's own spelling
+                "out_of_order": "Frames out of order",
                 "still": "Duplicate frames",
                 "skip": "Skipping frames",
             }

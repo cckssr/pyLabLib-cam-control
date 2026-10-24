@@ -205,6 +205,12 @@ class StandaloneFrame(container.QWidgetContainer):
             self.cam_ctl.add_child("plotter_area", self.image_plotter.plt, gui_values_path=False)
             self.cam_ctl.add_child("plotter_ctl", self.image_plotter.ctl, gui_values_path="img")
             self.image_plotter.ctl.set_img_lim(-65536, 65536)
+            # pylablib seeds the min/max preset from the initial (None, None) limits, so "Load
+            # preset" before any "Save preset" would crash; start from the current values instead
+            self.image_plotter.ctl.img_lim_preset = (
+                self.image_plotter.ctl.v["minlim"],
+                self.image_plotter.ctl.v["maxlim"],
+            )
             with self.image_plotter.using_layout("sidebar"):
                 self.display_settings_table = DisplaySettings_ctl.DisplaySettings_GUI(self)
                 self.image_plotter.add_to_layout(self.display_settings_table, location=-1)
@@ -320,7 +326,7 @@ class StandaloneFrame(container.QWidgetContainer):
 
         self.add_property_element(
             "defaults/window/maximized",
-            lambda: self.windowState() == QtCore.Qt.WindowMaximized,
+            lambda: bool(self.windowState() & QtCore.Qt.WindowMaximized),
             set_maximized,
             add_indicator=False,
         )
